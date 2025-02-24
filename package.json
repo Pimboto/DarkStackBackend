@@ -1,19 +1,26 @@
-
 {
   "name": "bsky-bot",
   "version": "1.0.0",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/bot.js",
-    "dev": "ts-node src/bot.ts"
+    "start": "node dist/bot-example.js",
+    "chat": "node dist/conversation-starter.js",
+    "dev": "node --loader ts-node/esm src/bot-example.ts",
+    "dev:chat": "node --loader ts-node/esm src/conversation-starter.ts",
+    "debug": "node --loader ts-node/esm src/debug.ts",
+    "test:simple": "node --loader ts-node/esm src/simple-bot.ts",
+    "test:skyware": "node --loader ts-node/esm src/simple-skyware.ts",
+    "bot:original": "node dist/bot.js",
+    "integrated": "node --loader ts-node/esm src/integrated-bot.ts"
   },
   "dependencies": {
     "@atproto/api": "^0.9.0",
+    "@skyware/bot": "^0.3.8",
     "dotenv": "^16.0.3",
-    "https-proxy-agent": "^7.0.0",
-    "http-proxy-agent": "^7.0.0"
-
+    "http-proxy-agent": "^7.0.0",
+    "https-proxy-agent": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^18.11.9",

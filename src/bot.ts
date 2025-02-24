@@ -1,6 +1,6 @@
 // src/bot.ts
-import { SessionManager } from './index';
-import { ProxyConfig } from './types';
+import { SessionManager } from './index.js';
+import { ProxyConfig } from './types.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -54,7 +54,8 @@ async function startBot() {
   }
 }
 
-if (require.main === module) {
+// En ESM, la comprobación del módulo principal es diferente
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
   startBot();
 }
-

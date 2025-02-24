@@ -1,12 +1,15 @@
 // src/session/manager.ts
-import { AtpSessionData, AtpSessionEvent, BskyAgent } from '@atproto/api';
+// Importar CommonJS módulos correctamente en ESM
+import atprotoApi from '@atproto/api';
+const { BskyAgent } = atprotoApi;
+
 import fs from 'fs/promises';
 import path from 'path';
-import { ProxyManager } from '../utils/proxy';
-import { SessionData, ProxyConfig } from '../types';
+import { ProxyManager } from '../utils/proxy.js';
+import { SessionData, ProxyConfig } from '../types.js';
 
 export class SessionManager {
-  private readonly agent: BskyAgent;
+  private readonly agent: any; // Cambio de tipo específico a any para evitar problemas
   private readonly proxyManager?: ProxyManager;
   private readonly sessionPath: string;
 
@@ -34,7 +37,7 @@ export class SessionManager {
 
     this.agent = new BskyAgent({
       service: this.service,
-      persistSession: (evt: AtpSessionEvent, sess?: AtpSessionData) => {
+      persistSession: (evt: any, sess?: any) => {
         if (sess) {
           this.saveSession({
             did: sess.did,
@@ -108,7 +111,7 @@ export class SessionManager {
     }
   }
 
-  getAgent(): BskyAgent {
+  getAgent(): any {
     return this.agent;
   }
 

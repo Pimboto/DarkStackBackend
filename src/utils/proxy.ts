@@ -1,7 +1,7 @@
-//src\utils\proxy.ts
+// src/utils/proxy.ts
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { HttpProxyAgent } from 'http-proxy-agent';
-import { ProxyConfig } from '../types';
+import { ProxyConfig } from '../types.js';
 
 export class ProxyManager {
   private readonly agent: HttpProxyAgent<string> | HttpsProxyAgent<string>;
