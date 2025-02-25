@@ -1,6 +1,5 @@
 // src/core/atpClient.ts
 import * as AtpApi from '@atproto/api';
-const { BskyAgent } = AtpApi;
 import { SessionData, ProxyConfig } from '../types/index.js';
 import { DEFAULT_SERVICE_URL } from '../config/config.js';
 import ProxyManager from './proxyManager.js';
@@ -10,7 +9,7 @@ import logger from '../utils/logger.js';
  * Cliente ATP para interactuar con la API de Bluesky
  */
 class AtpClient {
-  private readonly agent: typeof BskyAgent.prototype;
+  private readonly agent: InstanceType<typeof AtpApi.BskyAgent>;
   private readonly proxyManager?: ProxyManager;
 
   /**
@@ -29,7 +28,7 @@ class AtpClient {
     }
 
     // Crear agente Bluesky
-    this.agent = new BskyAgent({
+    this.agent = new AtpApi.BskyAgent({
       service: this.serviceUrl
     });
 
@@ -274,7 +273,7 @@ class AtpClient {
    * Obtiene el agente Bluesky para operaciones avanzadas
    * @returns El agente Bluesky
    */
-  getAgent(): typeof BskyAgent.prototype {
+  getAgent(): InstanceType<typeof AtpApi.BskyAgent> {
     return this.agent;
   }
 }

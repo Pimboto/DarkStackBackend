@@ -50,6 +50,7 @@ declare module '@atproto/api' {
   }
 
   const agent: {
+    default: any;
     BskyAgent: typeof BskyAgent;
   };
 

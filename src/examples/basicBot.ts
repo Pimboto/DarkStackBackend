@@ -1,18 +1,13 @@
 // src/examples/basicBot.ts
 import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeBsky, LogLevel, logger } from '../index.js';
 
-// Helper to get __filename in ES modules
-const __filename = fileURLToPath(import.meta.url);
-
-// Detailed environment variable loading
+// Load environment variables with detailed logging
 try {
   const envPath = path.resolve(process.cwd(), '.env');
   console.log('Attempting to load .env from:', envPath);
   
-  // Manually load and log environment variables
   const result = dotenv.config({ path: envPath });
   
   if (result.error) {
@@ -20,14 +15,6 @@ try {
   }
   
   console.log('Environment variables loaded successfully');
-  
-  // Log all environment variables for debugging
-  console.log('Environment Variables:');
-  Object.keys(process.env).forEach(key => {
-    if (key.startsWith('BSKY_') || key.startsWith('PROXY_')) {
-      console.log(`${key}: ${process.env[key]?.replace(/./g, '*')}`);
-    }
-  });
 } catch (error) {
   console.error('FATAL: Error loading .env file:', error);
   process.exit(1);
@@ -53,12 +40,12 @@ async function main() {
     
     // Configure logger with maximum verbosity
     logger.setLevel(LogLevel.DEBUG);
-    logger.debug('Logger configured to DEBUG level');
     
     // Detailed initialization logging
     console.log('Initializing Bluesky system...');
     const initStartTime = Date.now();
     
+    // Initialize Bluesky system with auto-login
     const { atpClient, postService } = await initializeBsky({
       autoLogin: true,
       logLevel: LogLevel.DEBUG
@@ -67,14 +54,14 @@ async function main() {
     const initEndTime = Date.now();
     console.log(`Bluesky system initialized in ${initEndTime - initStartTime}ms`);
     
-    // Comprehensive proxy check
+    // Comprehensive proxy check with detailed logging
     console.log('Checking proxy configuration...');
     const proxyInfo = await atpClient.checkProxy();
     console.log('Proxy Details:');
     console.log(`- Proxy String: ${proxyInfo.proxyString}`);
     console.log(`- Current IP: ${proxyInfo.currentIp}`);
     
-    // Create a test post
+    // Create a test post with enhanced logging
     console.log('Attempting to create a test post...');
     const postStartTime = Date.now();
     
@@ -86,7 +73,7 @@ async function main() {
     console.log(`Post created successfully in ${postEndTime - postStartTime}ms`);
     console.log(`Post URI: ${post.uri}`);
     
-    // Fetch and display timeline
+    // Fetch and display timeline with comprehensive error handling
     console.log('Fetching timeline...');
     const timelineStartTime = Date.now();
     
@@ -98,14 +85,36 @@ async function main() {
     
     // Detailed timeline post display
     console.log('Timeline Posts:');
-    timeline.feed.forEach((item: { post: { author: { handle: string }, record: { text: string }, indexedAt: string } }, index: number) => {
-      console.log(`[${index + 1}] @${item.post.author.handle}:`);
-      console.log(`  Text: "${item.post.record.text.substring(0, 100)}${item.post.record.text.length > 100 ? '...' : ''}"`);
-      console.log(`  Created At: ${item.post.indexedAt}`);
+    interface PostRecord {
+      text: string;
+    }
+
+    interface PostAuthor {
+      handle: string;
+    }
+
+    interface Post {
+      author: PostAuthor;
+      record: PostRecord;
+      indexedAt: string;
+    }
+
+    interface TimelineItem {
+      post: Post;
+    }
+
+    timeline.feed.forEach((item: TimelineItem, index: number) => {
+      try {
+        console.log(`[${index + 1}] @${item.post.author.handle}:`);
+        console.log(`  Text: "${item.post.record.text.substring(0, 100)}${item.post.record.text.length > 100 ? '...' : ''}"`);
+        console.log(`  Created At: ${item.post.indexedAt}`);
+      } catch (error) {
+        console.error(`Error processing timeline item ${index + 1}:`, error);
+      }
     });
     
     console.log('=== Basic Bot Example Completed Successfully ===');
-    process.exit(0);
+    return true;
     
   } catch (error: any) {
     console.error('=== FATAL ERROR in main function ===');
@@ -120,22 +129,21 @@ async function main() {
       console.error('- Data:', JSON.stringify(error.response?.data, null, 2));
     }
     
-    // Additional error context
-    if (error.cause) {
-      console.error('Error Cause:', error.cause);
-    }
-    
-    process.exit(1);
+    throw error;
   }
 }
 
-// Run the script only if it's the main module
-if (import.meta.url === `file://${__filename}`) {
-  console.log('Running basic bot as main script');
-  main().catch(error => {
-    console.error('Unhandled error in main execution:', error);
+// Immediately Invoked Function Expression (IIFE) to run the script
+(async () => {
+  try {
+    console.log('Starting bot execution...');
+    await main();
+    console.log('Bot execution completed successfully.');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error in bot execution:', error);
     process.exit(1);
-  });
-}
+  }
+})();
 
 export default main;
