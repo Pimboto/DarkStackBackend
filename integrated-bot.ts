@@ -1,7 +1,7 @@
 // src/integrated-bot.ts
 import dotenv from 'dotenv';
-import pkg from '@atproto/api';
-const { BskyAgent } = pkg;
+import * as AtpApi from '@atproto/api';
+const { BskyAgent } = AtpApi;
 import { HttpProxyAgent } from 'http-proxy-agent';
 import * as fs from 'fs/promises';
 import * as path from 'path';
