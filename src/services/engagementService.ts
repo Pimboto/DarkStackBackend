@@ -90,10 +90,11 @@ class EngagementService {
       dryRun?: boolean; 
       stopOnError?: boolean;
       timelinePosts?: TimelinePost[];
+      progressCallback?: (action: PlannedAction, index: number) => Promise<void>;
     } = {}
   ): Promise<EngagementResult[]> {
     const { plannedActions } = simulationResult;
-    const { dryRun = false, stopOnError = false } = options;
+    const { dryRun = false, stopOnError = false, progressCallback } = options;
     
     // Obtener posts del timeline si no se proporcionaron
     const timelinePosts = options.timelinePosts || 
@@ -109,7 +110,8 @@ class EngagementService {
     let currentPostIndex = 0;
     
     // Ejecutar cada acción
-    for (const action of plannedActions) {
+    for (let i = 0; i < plannedActions.length; i++) {
+      const action = plannedActions[i];
       try {
         logger.info(`Executing action ${action.index + 1}: ${action.type} (delay: ${action.delay}s, skip: ${action.skip})`);
         
@@ -173,6 +175,11 @@ class EngagementService {
         currentPostIndex++;
         action.executed = true;
         results.push(result);
+        
+        // Llamar al callback de progreso si existe
+        if (progressCallback) {
+          await progressCallback(action, i);
+        }
     
       } catch (error) {
         logger.error(`Error executing ${action.type} action:`, error);
@@ -187,10 +194,15 @@ class EngagementService {
           logger.warn('Stopping execution due to error');
           break;
         }
+        
+        // Llamar al callback de progreso incluso en caso de error
+        if (progressCallback) {
+          await progressCallback(action, i);
+        }
       }
     }
     // Resumen de la ejecución
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter((r: EngagementResult) => r.success).length;
     logger.info(`Engagement execution complete. Success: ${successCount}/${plannedActions.length}`);
     
     return results;

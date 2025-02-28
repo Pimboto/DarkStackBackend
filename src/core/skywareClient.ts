@@ -9,7 +9,7 @@ import logger from '../utils/logger.js';
  */
 class SkywareClient {
   private bot: SkywareBot | null = null;
-  private proxyManager?: ProxyManager;
+  private readonly proxyManager?: ProxyManager;
   
   /**
    * Crea una nueva instancia del cliente Skyware

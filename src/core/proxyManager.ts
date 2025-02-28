@@ -11,7 +11,7 @@ import logger from '../utils/logger.js';
 class ProxyManager {
   private readonly agent: HttpProxyAgent<string> | HttpsProxyAgent<string>;
   private readonly config: ProxyConfig;
-  private originalFetch: typeof fetch;
+  private readonly originalFetch: typeof fetch;
 
   /**
    * Crea una nueva instancia del gestor de proxies

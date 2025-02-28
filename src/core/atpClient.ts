@@ -13,7 +13,7 @@ const BskyAgent = (pkg as any).BskyAgent;
  */
 class AtpClient {
   // Usamos `any` en lugar de un tipado estricto para no chocar con el cast.
-  private agent: any;
+  private readonly agent: any;
   private readonly proxyManager?: ProxyManager;
 
   /**

@@ -40,11 +40,11 @@ console.log(`Credentials: ${username ? 'User available' : 'User NOT available'},
 
 // Proxy configuration with more detailed logging
 const proxyConfig = {
-  host: process.env.PROXY_HOST || 'ultra.marsproxies.com',
-  port: parseInt(process.env.PROXY_PORT || '44443'),
-  username: process.env.PROXY_USERNAME || 'mr45604xmD3',
-  password: process.env.PROXY_PASSWORD || 'M3AYECLDDO_country-us_session-qrn7anm9_lifetime-168h_ultraset-1',
-  protocol: process.env.PROXY_PROTOCOL || 'http'
+  host: process.env.PROXY_HOST ?? 'ultra.marsproxies.com',
+  port: parseInt(process.env.PROXY_PORT ?? '44443'),
+  username: process.env.PROXY_USERNAME ?? 'mr45604xmD3',
+  password: process.env.PROXY_PASSWORD ?? 'M3AYECLDDO_country-us_session-qrn7anm9_lifetime-168h_ultraset-1',
+  protocol: process.env.PROXY_PROTOCOL ?? 'http'
 };
 
 console.log('Configuring proxy...');
@@ -139,7 +139,7 @@ async function main() {
     for (let i = 0; i < Math.min(timeline.data.feed.length, 3); i++) {
       const item = timeline.data.feed[i];
       // Type-safe access to post text
-      const postText = (item.post?.record as { text?: string })?.text || 'No text available';
+      const postText = (item.post?.record as { text?: string })?.text ?? 'No text available';
       const authorHandle = item.post?.author?.handle || 'Unknown user';
       
       console.log(`[${i+1}] @${authorHandle}: "${postText.substring(0, 50)}..."`);
