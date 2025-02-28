@@ -1,12 +1,14 @@
-// src/workers/processors.js
-import { initializeBsky, LogLevel } from '../index.js';
-import logger from '../utils/logger.js';
-import { createEngagementStrategy } from '../strategies/engagementStrategy.js';
+// src/workers/processors.ts
+import { Job } from 'bullmq';
+import { initializeBsky, LogLevel } from '../index.ts';
+import logger from '../utils/logger.ts';
+import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
+import { SessionData } from '../types/index.ts';
 
 /**
  * Procesa un trabajo basicBot
  */
-export async function basicBotProcessor(job) {
+export async function basicBotProcessor(job: Job): Promise<any> {
   logger.info(`Processing basicBot job ${job.id}`);
   await job.updateProgress(10);
 
@@ -23,7 +25,7 @@ export async function basicBotProcessor(job) {
 
     await job.updateProgress(30);
 
-    const resumed = await atpClient.resumeSession(sessionData);
+    const resumed = await atpClient.resumeSession(sessionData as SessionData);
     if (!resumed) {
       throw new Error('Failed to resume session');
     }
@@ -61,7 +63,7 @@ export async function basicBotProcessor(job) {
 /**
  * Procesa un trabajo chatBot
  */
-export async function chatBotProcessor(job) {
+export async function chatBotProcessor(job: Job): Promise<any> {
   logger.info(`Processing chatBot job ${job.id}`);
   await job.updateProgress(10);
 
@@ -85,7 +87,7 @@ export async function chatBotProcessor(job) {
 
     await job.updateProgress(30);
 
-    const resumed = await atpClient.resumeSession(sessionData);
+    const resumed = await atpClient.resumeSession(sessionData as SessionData);
     if (!resumed) {
       throw new Error('Failed to resume session');
     }
@@ -115,7 +117,7 @@ export async function chatBotProcessor(job) {
         await chatService.sendMessage(conversation, msg);
 
         results.push({ recipient, success: true, message: `Message sent to ${recipient}` });
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`Error sending message to ${recipient}:`, error);
         results.push({
           recipient,
@@ -144,7 +146,7 @@ export async function chatBotProcessor(job) {
 /**
  * Procesa un trabajo engagementBot
  */
-export async function engagementBotProcessor(job) {
+export async function engagementBotProcessor(job: Job): Promise<any> {
   logger.info(`Processing engagementBot job ${job.id}`);
   await job.updateProgress(10);
 
@@ -161,7 +163,7 @@ export async function engagementBotProcessor(job) {
 
     await job.updateProgress(20);
 
-    const resumed = await atpClient.resumeSession(sessionData);
+    const resumed = await atpClient.resumeSession(sessionData as SessionData);
     if (!resumed) {
       throw new Error('Failed to resume session');
     }
@@ -173,7 +175,7 @@ export async function engagementBotProcessor(job) {
 
     logger.info(`Creating ${strategyType} engagement strategy...`);
     const strategy = createEngagementStrategy(
-      strategyType,
+      strategyType as 'random' | 'human-like',
       engagementOptions
     );
 

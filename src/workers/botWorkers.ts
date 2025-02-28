@@ -1,6 +1,6 @@
 // src/workers/botWorkers.ts
-import { createWorker, JobType } from '../services/queueService.js';
-import logger from '../utils/logger.js';
+import { createWorker, JobType } from '../services/queueService.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Crea los 3 workers para un userId

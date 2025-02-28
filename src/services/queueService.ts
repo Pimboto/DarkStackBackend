@@ -1,8 +1,8 @@
 // src/services/queueService.ts
 import { Queue, Worker, Job, QueueEvents, WorkerOptions } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import { createRedisClient, getRedisConfig } from '../config/redis.js';
-import logger from '../utils/logger.js';
+import { createRedisClient, getRedisConfig } from '../config/redis.ts';
+import logger from '../utils/logger.ts';
 import { EventEmitter } from 'events';
 
 // Importar processors directamente para evitar dependencias circulares
@@ -10,7 +10,7 @@ import {
   basicBotProcessor,
   chatBotProcessor,
   engagementBotProcessor
-} from '../workers/processors.js'
+} from '../workers/processors.ts'
 
 // Extender la interfaz WorkerOptions para incluir captureOutput
 interface ExtendedWorkerOptions extends WorkerOptions {
