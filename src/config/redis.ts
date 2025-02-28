@@ -25,7 +25,16 @@ export interface RedisOptions {
  * Obtiene configuración Redis desde variables de entorno
  */
 export function getRedisConfig(): RedisOptions {
-  // Verificar explícitamente la variable REDIS_USE_URL
+  // Log all Redis-related environment variables for debugging
+  logger.debug('Redis Environment Variables:');
+  logger.debug(`- REDIS_USE_URL: ${process.env.REDIS_USE_URL}`);
+  logger.debug(`- REDIS_URL: ${process.env.REDIS_URL ? '***REDACTED***' : 'not set'}`);
+  logger.debug(`- REDIS_HOST: ${process.env.REDIS_HOST || 'not set'}`);
+  logger.debug(`- REDIS_PORT: ${process.env.REDIS_PORT || 'not set'}`);
+  logger.debug(`- REDIS_USERNAME: ${process.env.REDIS_USERNAME ? 'set' : 'not set'}`);
+  logger.debug(`- REDIS_PASSWORD: ${process.env.REDIS_PASSWORD ? 'set' : 'not set'}`);
+  
+  // Verificar explícitamente la variable REDIS_USE_URL (asegurarnos que sea exactamente 'true')
   const useUrl = process.env.REDIS_USE_URL === 'true';
   
   if (useUrl) {
@@ -61,6 +70,16 @@ export function createRedisClient(options?: RedisOptions): Redis {
     // Si tenemos URL, usamos esa, de lo contrario usamos host/port
     const redisOptions: RedisOptions = config.url ? { url: config.url } : config;
     
+    // Log the exact options being used (with sensitive data redacted)
+    logger.debug('Creating Redis client with options:', JSON.stringify({
+      url: redisOptions.url ? '***REDACTED***' : undefined,
+      host: redisOptions.host,
+      port: redisOptions.port,
+      username: redisOptions.username ? '***REDACTED***' : undefined,
+      password: redisOptions.password ? '***REDACTED***' : undefined,
+      db: redisOptions.db
+    }));
+    
     // Configurar estrategia de reconexión robusta
     redisOptions.retryStrategy = (times: number) => {
       // Reintento exponencial con límite
@@ -75,15 +94,6 @@ export function createRedisClient(options?: RedisOptions): Redis {
     redisOptions.enableOfflineQueue = true;
     redisOptions.connectTimeout = 10000;
     redisOptions.disconnectTimeout = 5000;
-    
-    logger.debug('Creating Redis client with options:', JSON.stringify({
-      url: redisOptions.url ? '***REDACTED***' : undefined,
-      host: redisOptions.host,
-      port: redisOptions.port,
-      username: redisOptions.username ? '***REDACTED***' : undefined,
-      password: redisOptions.password ? '***REDACTED***' : undefined,
-      db: redisOptions.db
-    }));
     
     const client = new Redis(redisOptions);
     
@@ -115,6 +125,41 @@ export function createRedisClient(options?: RedisOptions): Redis {
   }
 }
 
+/**
+ * Verifica la conexión a Redis
+ * @returns Promise<boolean> true si la conexión es exitosa
+ */
+export async function verifyRedisConnection(): Promise<boolean> {
+  try {
+    logger.info('Testing Redis connection...');
+    const client = createRedisClient();
+    
+    return new Promise((resolve) => {
+      client.on('ready', () => {
+        logger.info('✅ Redis connection successful');
+        client.quit();
+        resolve(true);
+      });
+      
+      client.on('error', (err) => {
+        logger.error('❌ Redis connection failed:', err);
+        client.disconnect();
+        resolve(false);
+      });
+      
+      // Set a timeout in case connection hangs
+      setTimeout(() => {
+        logger.error('❌ Redis connection timeout after 5 seconds');
+        client.disconnect();
+        resolve(false);
+      }, 5000);
+    });
+  } catch (error) {
+    logger.error('❌ Error testing Redis connection:', error);
+    return false;
+  }
+}
+
 // Singleton Redis clients
 let sharedConnection: Redis | null = null;
 
@@ -143,5 +188,6 @@ export default {
   getRedisConfig,
   createRedisClient,
   getSharedRedisConnection,
-  closeRedisConnections
+  closeRedisConnections,
+  verifyRedisConnection
 };

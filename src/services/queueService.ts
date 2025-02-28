@@ -1,7 +1,7 @@
 // src/services/queueService.ts
 import { Queue, Worker, Job, QueueEvents, WorkerOptions } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import { createRedisClient } from '../config/redis.js';
+import { createRedisClient, getRedisConfig } from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
 
@@ -93,9 +93,19 @@ export function getQueue(jobType: JobType, userId: string): Queue {
   const queueKey = getQueueKey(jobType, userId);
   if (!queueMap.has(queueKey)) {
     const queueName = getQueueName(jobType, userId);
+    
+    // Create a specific connection for this queue
     const connection = createRedisClient();
 
     logger.info(`Creating queue '${queueName}' for user ${userId}`);
+    
+    // Log the Redis configuration being used
+    const redisConfig = getRedisConfig();
+    logger.debug(`Queue '${queueName}' using Redis connection:`, 
+      redisConfig.url 
+        ? `URL: ***REDACTED***` 
+        : `Host: ${redisConfig.host}, Port: ${redisConfig.port}`
+    );
 
     const queueOpts = {
       connection,
@@ -110,7 +120,7 @@ export function getQueue(jobType: JobType, userId: string): Queue {
     const queue = new Queue(queueName, queueOpts);
     queueMap.set(queueKey, queue);
 
-    // QueueEvents
+    // QueueEvents con la misma conexión
     const queueEvents = new QueueEvents(queueName, { connection });
     setupQueueEvents(queueEvents, queueName);
     queueEventsMap.set(queueKey, queueEvents);
@@ -144,9 +154,20 @@ export function createWorker(
     `Creating worker for queue '${queueName}' concurrency=${concurrency}`
   );
 
+  // Create a new connection for this worker
+  const connection = createRedisClient();
+  
+  // Log the Redis configuration being used
+  const redisConfig = getRedisConfig();
+  logger.debug(`Worker for '${queueName}' using Redis connection:`, 
+    redisConfig.url 
+      ? `URL: ***REDACTED***` 
+      : `Host: ${redisConfig.host}, Port: ${redisConfig.port}`
+  );
+
   // Usamos la interfaz extendida para incluir captureOutput
   const workerOptions: ExtendedWorkerOptions = {
-    connection: createRedisClient(),
+    connection,
     concurrency,
     autorun: true,
     stalledInterval: 30000,
