@@ -29,8 +29,8 @@ export function getRedisConfig(): RedisOptions {
   logger.debug('Redis Environment Variables:');
   logger.debug(`- REDIS_USE_URL: ${process.env.REDIS_USE_URL}`);
   logger.debug(`- REDIS_URL: ${process.env.REDIS_URL ? '***REDACTED***' : 'not set'}`);
-  logger.debug(`- REDIS_HOST: ${process.env.REDIS_HOST || 'not set'}`);
-  logger.debug(`- REDIS_PORT: ${process.env.REDIS_PORT || 'not set'}`);
+  logger.debug(`- REDIS_HOST: ${process.env.REDIS_HOST ?? 'not set'}`);
+  logger.debug(`- REDIS_PORT: ${process.env.REDIS_PORT ?? 'not set'}`);
   logger.debug(`- REDIS_USERNAME: ${process.env.REDIS_USERNAME ? 'set' : 'not set'}`);
   logger.debug(`- REDIS_PASSWORD: ${process.env.REDIS_PASSWORD ? 'set' : 'not set'}`);
   
@@ -54,8 +54,8 @@ export function getRedisConfig(): RedisOptions {
   return {
     host: getEnvVariable('REDIS_HOST', 'localhost'),
     port: parseInt(getEnvVariable('REDIS_PORT', '6379')),
-    username: process.env.REDIS_USERNAME || undefined,
-    password: process.env.REDIS_PASSWORD || undefined,
+    username: process.env.REDIS_USERNAME ?? undefined,
+    password: process.env.REDIS_PASSWORD ?? undefined,
     db: parseInt(getEnvVariable('REDIS_DB', '0')),
   };
 }

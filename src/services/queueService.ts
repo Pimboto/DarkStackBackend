@@ -5,6 +5,13 @@ import { createRedisClient, getRedisConfig } from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
 
+// Importar processors directamente para evitar dependencias circulares
+import {
+  basicBotProcessor,
+  chatBotProcessor,
+  engagementBotProcessor
+} from '../workers/processors.js'
+
 // Extender la interfaz WorkerOptions para incluir captureOutput
 interface ExtendedWorkerOptions extends WorkerOptions {
   captureOutput?: boolean;
@@ -28,11 +35,21 @@ const workerMap = new Map<string, Worker>();
 const queueEventsMap = new Map<string, QueueEvents>();
 
 /**
+ * Mapa procesadores por tipo de trabajo
+ */
+const processorMap: Record<JobType, (job: Job) => Promise<any>> = {
+  'basicBot': basicBotProcessor,
+  'chatBot': chatBotProcessor,
+  'engagementBot': engagementBotProcessor
+};
+
+/**
  * Retorna clave y nombre de la cola
  */
 function getQueueKey(jobType: JobType, userId: string) {
   return `${jobType}:${userId}`;
 }
+
 function getQueueName(jobType: JobType, userId: string) {
   return `bsky-${jobType}-${userId}`;
 }
@@ -87,10 +104,11 @@ function setupWorkerEvents(worker: Worker, queueName: string): void {
 }
 
 /**
- * Crea o retorna una Queue
+ * Crea o retorna una Queue y asegura que haya un worker asociado
  */
 export function getQueue(jobType: JobType, userId: string): Queue {
   const queueKey = getQueueKey(jobType, userId);
+  
   if (!queueMap.has(queueKey)) {
     const queueName = getQueueName(jobType, userId);
     
@@ -124,9 +142,12 @@ export function getQueue(jobType: JobType, userId: string): Queue {
     const queueEvents = new QueueEvents(queueName, { connection });
     setupQueueEvents(queueEvents, queueName);
     queueEventsMap.set(queueKey, queueEvents);
-
-    // QueueScheduler was removed as it's deprecated in BullMQ 2.0+ 
-    // (You're using BullMQ 5.41.7)
+    
+    // AUTO INICIALIZACIÓN: Crear un worker automáticamente cuando se crea una cola
+    // (si no existe ya)
+    if (!workerMap.has(queueKey)) {
+      createWorker(jobType, userId, 3); // Usar concurrencia por defecto de 3
+    }
   }
 
   return queueMap.get(queueKey)!;
@@ -138,11 +159,16 @@ export function getQueue(jobType: JobType, userId: string): Queue {
 export function createWorker(
   jobType: JobType,
   userId: string,
-  concurrency: number,
-  processor: (job: Job<any, any, any>) => Promise<any>
+  concurrency: number = 3
 ): Worker {
   const queueKey = getQueueKey(jobType, userId);
   const queueName = getQueueName(jobType, userId);
+  
+  // Seleccionar el procesador adecuado
+  const processor = processorMap[jobType];
+  if (!processor) {
+    throw new Error(`No processor found for job type: ${jobType}`);
+  }
 
   // Si existe worker previo
   if (workerMap.has(queueKey)) {
@@ -207,7 +233,8 @@ export function createWorker(
 
   setupWorkerEvents(worker, queueName);
   workerMap.set(queueKey, worker);
-
+  
+  logger.info(`Worker for '${queueName}' is now active and processing jobs`);
   return worker;
 }
 
@@ -225,6 +252,7 @@ export async function addJob(
     attempts?: number;
   }
 ): Promise<string> {
+  // Obtener o crear la cola (y worker automáticamente)
   const q = getQueue(jobType, userId);
   const parentId = options?.parentId;
   const jobId = parentId ? `${parentId}:${uuidv4()}` : uuidv4();
@@ -253,6 +281,12 @@ export async function addJob(
     parentId: parentId ?? null,
   });
 
+  // Asegurarse explícitamente que hay un worker para esta cola
+  if (!workerMap.has(getQueueKey(jobType, userId))) {
+    logger.info(`No worker found for queue ${q.name}. Creating one now...`);
+    createWorker(jobType, userId);
+  }
+
   return jobId;
 }
 
@@ -270,6 +304,7 @@ export async function addBulkJobs(
     attempts?: number;
   }
 ) {
+  // Obtener o crear la cola (y worker automáticamente)
   const q = getQueue(jobType, userId);
   const parentId = options?.parentId ?? uuidv4();
 
@@ -309,6 +344,12 @@ export async function addBulkJobs(
       parentId,
     });
   });
+
+  // Asegurarse explícitamente que hay un worker para esta cola
+  if (!workerMap.has(getQueueKey(jobType, userId))) {
+    logger.info(`No worker found for queue ${q.name}. Creating one now...`);
+    createWorker(jobType, userId);
+  }
 
   return jobIds;
 }
