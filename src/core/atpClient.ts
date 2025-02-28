@@ -1,15 +1,19 @@
 // src/core/atpClient.ts
-import * as AtpApi from '@atproto/api';
+import pkg from '@atproto/api';
 import { SessionData, ProxyConfig } from '../types/index.js';
 import { DEFAULT_SERVICE_URL } from '../config/config.js';
 import ProxyManager from './proxyManager.js';
 import logger from '../utils/logger.js';
 
+// Forzamos a any para evitar el error "Property 'BskyAgent' does not exist..."
+const BskyAgent = (pkg as any).BskyAgent;
+
 /**
  * Cliente ATP para interactuar con la API de Bluesky
  */
 class AtpClient {
-  private readonly agent: InstanceType<typeof AtpApi.BskyAgent>;
+  // Usamos `any` en lugar de un tipado estricto para no chocar con el cast.
+  private agent: any;
   private readonly proxyManager?: ProxyManager;
 
   /**
@@ -28,7 +32,7 @@ class AtpClient {
     }
 
     // Crear agente Bluesky
-    this.agent = new AtpApi.BskyAgent({
+    this.agent = new BskyAgent({
       service: this.serviceUrl
     });
 
@@ -44,7 +48,7 @@ class AtpClient {
   async login(identifier: string, password: string): Promise<SessionData> {
     try {
       logger.info(`Attempting to login as ${identifier}...`);
-      
+
       const result = await this.agent.login({
         identifier,
         password
@@ -55,7 +59,7 @@ class AtpClient {
         handle: result.data.handle,
         email: result.data.email,
         accessJwt: result.data.accessJwt,
-        refreshJwt: result.data.refreshJwt,
+        refreshJwt: result.data.refreshJwt
       };
 
       logger.info(`Login successful as: ${session.handle}`);
@@ -74,15 +78,14 @@ class AtpClient {
   async resumeSession(session: SessionData): Promise<boolean> {
     try {
       logger.debug('Resuming existing session...');
-      
       await this.agent.resumeSession({
         did: session.did,
         handle: session.handle,
         email: session.email,
         accessJwt: session.accessJwt,
-        refreshJwt: session.refreshJwt,
+        refreshJwt: session.refreshJwt
       });
-      
+
       logger.info(`Session resumed for: ${session.handle}`);
       return true;
     } catch (error) {
@@ -105,10 +108,9 @@ class AtpClient {
     try {
       logger.debug('Creating post...');
       const result = await this.agent.post({
-        text: text,
-        createdAt: new Date().toISOString(),
+        text,
+        createdAt: new Date().toISOString()
       });
-      
       logger.info('Post created successfully');
       return result;
     } catch (error) {
@@ -132,7 +134,6 @@ class AtpClient {
     try {
       logger.debug(`Liking post ${uri}...`);
       const result = await this.agent.like(uri, cid);
-      
       logger.info('Post liked successfully');
       return result;
     } catch (error) {
@@ -156,7 +157,6 @@ class AtpClient {
     try {
       logger.debug(`Reposting ${uri}...`);
       const result = await this.agent.repost(uri, cid);
-      
       logger.info('Repost created successfully');
       return result;
     } catch (error) {
@@ -179,7 +179,6 @@ class AtpClient {
     try {
       logger.debug(`Following user ${did}...`);
       const result = await this.agent.follow(did);
-      
       logger.info('Follow successful');
       return result;
     } catch (error) {
@@ -202,7 +201,6 @@ class AtpClient {
     try {
       logger.debug(`Getting timeline (limit: ${limit})...`);
       const result = await this.agent.getTimeline({ limit });
-      
       logger.info(`Retrieved ${result.data.feed.length} posts from timeline`);
       return result.data;
     } catch (error) {
@@ -226,14 +224,13 @@ class AtpClient {
     try {
       logger.debug(`Replying to post ${replyTo.uri}...`);
       const result = await this.agent.post({
-        text: text,
+        text,
         createdAt: new Date().toISOString(),
         reply: {
           root: { uri: replyTo.uri, cid: replyTo.cid },
           parent: { uri: replyTo.uri, cid: replyTo.cid }
         }
       });
-      
       logger.info('Reply created successfully');
       return result;
     } catch (error) {
@@ -247,15 +244,16 @@ class AtpClient {
    * @returns Información del proxy
    */
   async checkProxy(): Promise<{ proxyString: string; currentIp: string }> {
+    // Si se configuró ProxyManager, lo delegamos
     if (this.proxyManager) {
       return await this.proxyManager.checkProxy();
     }
-    
+
     try {
       logger.debug('Checking IP (no proxy configured)...');
       const response = await fetch('https://api.ipify.org?format=json');
       const data = await response.json();
-      
+
       return {
         proxyString: 'No proxy configured',
         currentIp: data.ip
@@ -271,9 +269,8 @@ class AtpClient {
 
   /**
    * Obtiene el agente Bluesky para operaciones avanzadas
-   * @returns El agente Bluesky
    */
-  getAgent(): InstanceType<typeof AtpApi.BskyAgent> {
+  getAgent(): any {
     return this.agent;
   }
 }

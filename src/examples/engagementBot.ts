@@ -1,4 +1,3 @@
-// src/examples/engagementBot.ts
 import { initializeBsky, LogLevel } from '../index.js';
 import { createEngagementStrategy } from '../strategies/engagementStrategy.js';
 import logger from '../utils/logger.js';
@@ -25,10 +24,10 @@ async function main() {
     
     // Opciones de engagement
     const engagementOptions = {
-      numberOfActions: 20,       // Número total de acciones
-      delayRange: [10, 30] as [number, number],      // Retraso entre acciones (segundos)
-      skipRange: [0, 3] as [number, number],         // Posts a saltar
-      likePercentage: 70         // Porcentaje de likes (vs reposts)
+      numberOfActions: 20,                    // Número total de acciones
+      delayRange: [10, 30] as [number, number],  // Retraso entre acciones (segundos)
+      skipRange: [0, 1] as [number, number],     // Posts a saltar (REDUCIDO)
+      likePercentage: 70                         // Porcentaje de likes (vs reposts)
     };
     
     // Crear estrategia de engagement
@@ -44,17 +43,13 @@ async function main() {
     logger.info(`Total time: ${Math.round(simulationResult.totalTime / 60)} minutes`);
     logger.info(`Actions: ${simulationResult.likeCount} likes, ${simulationResult.repostCount} reposts`);
     
-    // Pedir confirmación para ejecutar
-    logger.info('Ready to execute engagement plan');
-    
-    // En una aplicación real, aquí se añadiría una confirmación del usuario
-    // o un método para continuar con la ejecución
-    const shouldExecute = true; // Esto vendría de la entrada del usuario
-    
+    // En una aplicación real, aquí se añadiría confirmación del usuario
+    const shouldExecute = true; // Hardcodeado a true
+
     if (shouldExecute) {
-      // Obtener timeline
+      // Obtener timeline (pedimos 100 posts en vez de 50)
       logger.info('Getting timeline...');
-      const timelineResponse = await atpClient.getTimeline(50);
+      const timelineResponse = await atpClient.getTimeline(100);
       const timelinePosts = timelineResponse.feed;
       
       logger.info(`Retrieved ${timelinePosts.length} posts from timeline`);
@@ -64,7 +59,7 @@ async function main() {
       const results = await engagementService.executeEngagement(simulationResult, {
         timelinePosts,
         stopOnError: false,
-        dryRun: false // Cambiar a true para simular sin ejecutar realmente
+        dryRun: false // Poner en true para simular sin ejecutar realmente
       });
       
       // Mostrar resultados
@@ -96,14 +91,10 @@ async function main() {
   }
 }
 
-// Ejecutar el ejemplo
-if (import.meta.url.startsWith('file:')) {
-  const scriptPath = process.argv[1] ? new URL(process.argv[1], 'file://').pathname : '';
-  const currentPath = import.meta.url.replace('file://', '');
-  
-  if (currentPath === scriptPath || process.argv[1] === undefined) {
-    main().catch(console.error);
-  }
-}
+// Ejecutar el ejemplo siempre que se invoque este archivo directamente
+main().catch((err) => {
+  console.error('Unhandled error in engagementBot:', err);
+  process.exit(1);
+});
 
 export default main;

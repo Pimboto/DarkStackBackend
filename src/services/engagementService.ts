@@ -113,76 +113,82 @@ class EngagementService {
       try {
         logger.info(`Executing action ${action.index + 1}: ${action.type} (delay: ${action.delay}s, skip: ${action.skip})`);
         
-        // Aplicar delay
+        // Esperar el delay
         await sleep(action.delay * 1000);
         
-        // Avanzar en el timeline según el número de posts a saltar
+        // Avanzar posts
         currentPostIndex += action.skip;
-        
-        // Asegurarse de que el índice está dentro de los límites
         if (currentPostIndex >= timelinePosts.length) {
           currentPostIndex = timelinePosts.length - 1;
           logger.warn(`Skip value too high, using last available post (index: ${currentPostIndex})`);
         }
-        
-        const post = timelinePosts[currentPostIndex];
-        
-        logger.info(`Selected post from @${post.author.handle}: "${post.text.substring(0, 50)}..."`);
-        
+    
+        // Obtenemos el feedItem
+        const feedItem = timelinePosts[currentPostIndex];
+        if (!feedItem || !feedItem.post) {
+          logger.warn('feedItem invalid or missing .post. Skipping...');
+          continue;
+        }
+    
+        // Extraemos datos reales
+        const rawPost = feedItem.post;
+        const postUri = rawPost.uri;
+        const postCid = rawPost.cid;
+        const authorHandle = rawPost.author?.handle || '(no handle)';
+        // `record.text` a veces es un objeto
+        const postText = typeof rawPost.record?.text === 'string'
+          ? rawPost.record.text
+          : JSON.stringify(rawPost.record);
+    
+        logger.info(`Selected post from @${authorHandle}: "${postText.substring(0, 50)}..."`);
+    
+        // Ejecutar acción
         let result: EngagementResult;
-        
-        // Ejecutar la acción según el tipo (o simular en modo dryRun)
         if (!dryRun) {
           if (action.type === 'like') {
-            await this.atpClient.likePost(post.uri, post.cid);
-            logger.info(`Liked post: ${post.uri}`);
+            await this.atpClient.likePost(postUri, postCid);
+            logger.info(`Liked post: ${postUri}`);
           } else {
-            await this.atpClient.repostPost(post.uri, post.cid);
-            logger.info(`Reposted post: ${post.uri}`);
+            await this.atpClient.repostPost(postUri, postCid);
+            logger.info(`Reposted post: ${postUri}`);
           }
           
           result = {
             success: true,
             action: action.type,
-            postUri: post.uri,
-            postCid: post.cid
+            postUri,
+            postCid
           };
         } else {
-          logger.info(`[DRY RUN] Would have ${action.type}d post: ${post.uri}`);
-          
+          logger.info(`[DRY RUN] Would have ${action.type}d post: ${postUri}`);
           result = {
             success: true,
             action: action.type,
-            postUri: post.uri,
-            postCid: post.cid
+            postUri,
+            postCid
           };
         }
-        
-        // Avanzar al siguiente post
+    
+        // Avanzar
         currentPostIndex++;
-        
-        // Marcar acción como ejecutada y guardar resultado
         action.executed = true;
         results.push(result);
-        
+    
       } catch (error) {
         logger.error(`Error executing ${action.type} action:`, error);
-        
         const errorResult: EngagementResult = {
           success: false,
           action: action.type,
           error: error instanceof Error ? error : new Error(String(error))
         };
-        
         results.push(errorResult);
-        
+    
         if (stopOnError) {
           logger.warn('Stopping execution due to error');
           break;
         }
       }
     }
-    
     // Resumen de la ejecución
     const successCount = results.filter(r => r.success).length;
     logger.info(`Engagement execution complete. Success: ${successCount}/${plannedActions.length}`);
