@@ -20,7 +20,6 @@ export const queueEmitter = new EventEmitter();
  */
 const queueMap = new Map<string, Queue>();
 const workerMap = new Map<string, Worker>();
-const schedulerMap = new Map<string, QueueScheduler>();
 const queueEventsMap = new Map<string, QueueEvents>();
 
 /**
@@ -111,9 +110,8 @@ export function getQueue(jobType: JobType, userId: string): Queue {
     setupQueueEvents(queueEvents, queueName);
     queueEventsMap.set(queueKey, queueEvents);
 
-    // QueueScheduler
-    const scheduler = new QueueScheduler(queueName, { connection });
-    schedulerMap.set(queueKey, scheduler);
+    // QueueScheduler was removed as it's deprecated in BullMQ 2.0+ 
+    // (You're using BullMQ 5.41.7)
   }
 
   return queueMap.get(queueKey)!;
@@ -327,13 +325,6 @@ export async function closeAllQueues(): Promise<void> {
     await w.close();
   }
   workerMap.clear();
-
-  // Schedulers
-  for (const [key, sch] of schedulerMap.entries()) {
-    logger.debug(`Closing scheduler for ${key}...`);
-    await sch.close();
-  }
-  schedulerMap.clear();
 
   // QueueEvents
   for (const [key, qe] of queueEventsMap.entries()) {

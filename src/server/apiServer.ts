@@ -50,22 +50,25 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// Middleware ficticio para userId
-app.use((req: Request, res: Response, next: NextFunction) => {
+// Middleware ficticio para userId - Corregido para evitar error TS2769
+const userIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const userId =
     (req.headers['x-user-id'] as string) || (req.query.userId as string);
 
   if (!userId) {
-    return res.status(401).json({
+    res.status(401).json({
       error: 'Unauthorized',
       message:
         'User ID is required. Provide it in x-user-id header or userId query parameter.',
     });
+    return;
   }
 
   req.userId = userId;
   next();
-});
+};
+
+app.use(userIdMiddleware);
 
 // Router principal
 const apiRouter = express.Router();
@@ -284,16 +287,20 @@ createBullBoard({
   serverAdapter,
 });
 
-// Optional: proteger /admin/queues con auth
+// Optional: proteger /admin/queues con auth - Corregido para evitar error TS2769
 if (process.env.NODE_ENV === 'production') {
-  app.use('/admin/queues', (req, res, next) => {
+  const adminAuthMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const adminKey = req.query.key || req.headers['x-admin-key'];
     if (adminKey !== process.env.ADMIN_API_KEY) {
-      return res.status(403).send('Unauthorized');
+      res.status(403).send('Unauthorized');
+      return;
     }
     next();
-  });
+  };
+  
+  app.use('/admin/queues', adminAuthMiddleware);
 }
+
 app.use('/admin/queues', serverAdapter.getRouter());
 
 // Servidor HTTP y socket.io
