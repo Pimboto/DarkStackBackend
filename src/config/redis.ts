@@ -36,8 +36,8 @@ export function getRedisConfig(): RedisOptions {
   return {
     host: getEnvVariable('REDIS_HOST', 'localhost'),
     port: parseInt(getEnvVariable('REDIS_PORT', '6379')),
-    username: process.env.REDIS_USERNAME || undefined,
-    password: process.env.REDIS_PASSWORD || undefined,
+    username: process.env.REDIS_USERNAME ?? undefined,
+    password: process.env.REDIS_PASSWORD ?? undefined,
     db: parseInt(getEnvVariable('REDIS_DB', '0')),
   };
 }

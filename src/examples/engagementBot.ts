@@ -76,7 +76,7 @@ async function main() {
       if (errorCount > 0) {
         logger.warn(`Failed actions: ${errorCount}`);
         results.filter(r => !r.success).forEach((result, index) => {
-          logger.error(`Error ${index + 1}: ${result.error?.message || 'Unknown error'}`);
+          logger.error(`Error ${index + 1}: ${result.error?.message ?? 'Unknown error'}`);
         });
       }
     } else {

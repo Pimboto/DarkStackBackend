@@ -1,8 +1,8 @@
 // src/services/queueService.ts
 import { Queue, Worker, Job, QueueEvents } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import { createRedisClient } from '../config/redis.ts';
-import logger from '../utils/logger.ts';
+import { createRedisClient } from '../config/redis.js';
+import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
 
 /**
@@ -171,6 +171,8 @@ export function createWorker(
       maxStalledCount: 2,
       lockDuration: 60000,
       drainDelay: 5,
+      // Habilitar captura de logs
+      captureOutput: true
     }
   );
 
@@ -201,7 +203,7 @@ export async function addJob(
   const jobData = {
     ...data,
     userId,
-    parentId: parentId || null,
+    parentId: parentId ?? null,
     createdAt: new Date().toISOString(),
   };
 
@@ -219,7 +221,7 @@ export async function addJob(
     userId,
     jobType,
     data: jobData,
-    parentId: parentId || null,
+    parentId: parentId ?? null,
   });
 
   return jobId;
@@ -240,7 +242,7 @@ export async function addBulkJobs(
   }
 ) {
   const q = getQueue(jobType, userId);
-  const parentId = options?.parentId || uuidv4();
+  const parentId = options?.parentId ?? uuidv4();
 
   const bulk = dataItems.map((d) => {
     const jId = `${parentId}:${uuidv4()}`;

@@ -29,7 +29,7 @@ export { default as logger } from './utils/logger.ts';
 export * from './utils/delay.ts';
 export * from './utils/random.ts';
 
-// Crear una función para inicializar todo el sistema
+// Crear una función para inicializar all el sistema
 import { getProxyConfig, getBskyCredentials } from './config/config.ts';
 import AtpClient from './core/atpClient.ts';
 import SkywareClient from './core/skywareClient.ts';
@@ -71,7 +71,7 @@ export interface BskyInitOptions {
 }
 
 /**
- * Inicializa todo el sistema Bluesky
+ * Inicializa all el sistema Bluesky
  * @param options Opciones de inicialización
  * @returns Objeto con todos los componentes inicializados
  */

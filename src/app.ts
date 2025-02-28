@@ -24,7 +24,7 @@ try {
 }
 
 // Configurar nivel de log
-const logLevelString = process.env.LOG_LEVEL || 'info';
+const logLevelString = process.env.LOG_LEVEL ?? 'info';
 const logLevelMap: Record<string, LogLevel> = {
   error: LogLevel.ERROR,
   warn: LogLevel.WARN,

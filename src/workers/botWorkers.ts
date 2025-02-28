@@ -1,10 +1,10 @@
 // src/workers/botWorkers.ts
 import { Job } from 'bullmq';
-import { createWorker, JobType } from '../services/queueService.ts';
-import { initializeBsky, LogLevel } from '../index.ts';
-import logger from '../utils/logger.ts';
-import { SessionData } from '../types/index.ts';
-import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
+import { createWorker, JobType } from '../services/queueService.js';
+import { initializeBsky, LogLevel } from '../index.js';
+import logger from '../utils/logger.js';
+import { SessionData } from '../types/index.js';
+import { createEngagementStrategy } from '../strategies/engagementStrategy.js';
 
 interface EngagementResult {
   success: boolean;
@@ -219,7 +219,8 @@ async function engagementBotProcessor(job: Job<any, any, any>): Promise<any> {
 
     // Log de cada acción
     for (let i = 0; i < results.length; i++) {
-      await job.log(`Executed ${results[i].action || '?'} action #${i}`);
+      // Aquí usamos console.log para que se capture con captureOutput: true
+      console.log(`Executed ${results[i].action ?? '?'} action #${i}`);
       await reportActionProgress();
     }
 

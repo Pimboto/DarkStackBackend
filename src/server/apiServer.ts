@@ -17,9 +17,9 @@ import {
   getQueue,
   queueEmitter,
   JobType,
-} from '../services/queueService.ts';
-import { createBotWorkers } from '../workers/botWorkers.ts';
-import logger from '../utils/logger.ts';
+} from '../services/queueService.js';
+import { createBotWorkers } from '../workers/botWorkers.js';
+import logger from '../utils/logger.js';
 
 // Auxiliar: async/await en endpoints
 function customAsyncHandler<
@@ -201,8 +201,8 @@ apiRouter.get(
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    // getLogs() lo hemos declarado vía declaración de tipos en bullmq.d.ts
-    const logs = await job.getLogs();
+    // Obtiene logs desde data.logs (captureOutput: true) si están disponibles
+    const logs = job.data?.logs || [];
 
     return res.json({
       id: job.id,
@@ -221,7 +221,7 @@ apiRouter.get(
           : null,
       },
       returnvalue: job.returnvalue,
-      logs: logs ? logs.logs : [],
+      logs: logs, // Devuelve los logs capturados
     });
   })
 );
@@ -338,7 +338,7 @@ export async function startServer(port = 3000): Promise<http.Server> {
 
     // init-workers
     socket.on('init-workers', (data: { concurrency?: number }) => {
-      const concurrency = data.concurrency || 5;
+      const concurrency = data.concurrency ?? 5;
       logger.info(
         `Initializing workers for user ${userId}, concurrency ${concurrency}`
       );
