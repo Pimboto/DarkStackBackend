@@ -34,7 +34,7 @@ function getQueueKey(jobType: JobType, userId: string) {
   return `${jobType}:${userId}`;
 }
 function getQueueName(jobType: JobType, userId: string) {
-  return `bsky:${jobType}:${userId}`;
+  return `bsky-${jobType}-${userId}`;
 }
 
 /**
