@@ -28,7 +28,7 @@ export function getRedisConfig(): RedisOptions {
   const useUrl = process.env.REDIS_USE_URL === 'true';
   
   if (useUrl) {
-    const url = getEnvVariable('REDIS_URL', 'redis://localhost:6379');
+    const url = getEnvVariable('REDIS_URL');
     logger.debug(`Using Redis URL: ${url.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`);
     return { url };
   }

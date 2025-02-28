@@ -4,8 +4,9 @@ import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import { Server as SocketServer } from 'socket.io';
+// Corregir importaciones de Bull Board
 import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
 import { ExpressAdapter } from '@bull-board/express';
 import { rateLimit } from 'express-rate-limit';
 

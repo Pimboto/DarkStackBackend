@@ -1,9 +1,14 @@
 // src/services/queueService.ts
-import { Queue, Worker, Job, QueueEvents } from 'bullmq';
+import { Queue, Worker, Job, QueueEvents, WorkerOptions } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
 import { createRedisClient } from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
+
+// Extender la interfaz WorkerOptions para incluir captureOutput
+interface ExtendedWorkerOptions extends WorkerOptions {
+  captureOutput?: boolean;
+}
 
 /**
  * Tipos de trabajo
@@ -139,6 +144,19 @@ export function createWorker(
     `Creating worker for queue '${queueName}' concurrency=${concurrency}`
   );
 
+  // Usamos la interfaz extendida para incluir captureOutput
+  const workerOptions: ExtendedWorkerOptions = {
+    connection: createRedisClient(),
+    concurrency,
+    autorun: true,
+    stalledInterval: 30000,
+    maxStalledCount: 2,
+    lockDuration: 60000,
+    drainDelay: 5,
+    // Habilitar captura de logs
+    captureOutput: true
+  };
+
   const worker = new Worker(
     queueName,
     async (job: Job<any, any, any>) => {
@@ -163,17 +181,7 @@ export function createWorker(
         throw err;
       }
     },
-    {
-      connection: createRedisClient(),
-      concurrency,
-      autorun: true,
-      stalledInterval: 30000,
-      maxStalledCount: 2,
-      lockDuration: 60000,
-      drainDelay: 5,
-      // Habilitar captura de logs
-      captureOutput: true
-    }
+    workerOptions
   );
 
   setupWorkerEvents(worker, queueName);
