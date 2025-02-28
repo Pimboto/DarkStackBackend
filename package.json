@@ -8,7 +8,7 @@
     "start:basic": "node dist/examples/basicBot.js",
     "start:chat": "node dist/examples/chatBot.js",
     "start:engagement": "node dist/examples/engagementBot.js",
-    "dev:minimal": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/minimal-bot.ts",
+    "dev": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/app.ts",
     "dev:basic": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/basicBot.ts",
     "dev:chat": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/chatBot.ts",
     "dev:engagement": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/engagementBot.ts",
