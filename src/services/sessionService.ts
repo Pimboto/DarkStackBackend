@@ -1,9 +1,9 @@
 // src/services/sessionService.ts
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { SessionData } from '../types/index.js';
-import { DEFAULT_SESSION_FILE_PATH } from '../config/config.js';
-import logger from '../utils/logger.js';
+import { SessionData } from '../types/index.ts';
+import { DEFAULT_SESSION_FILE_PATH } from '../config/config.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Servicio para gestionar sesiones

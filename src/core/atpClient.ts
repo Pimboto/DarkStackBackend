@@ -1,9 +1,9 @@
 // src/core/atpClient.ts
 import pkg from '@atproto/api';
-import { SessionData, ProxyConfig } from '../types/index.js';
-import { DEFAULT_SERVICE_URL } from '../config/config.js';
-import ProxyManager from './proxyManager.js';
-import logger from '../utils/logger.js';
+import { SessionData, ProxyConfig } from '../types/index.ts';
+import { DEFAULT_SERVICE_URL } from '../config/config.ts';
+import ProxyManager from './proxyManager.ts';
+import logger from '../utils/logger.ts';
 
 // Forzamos a any para evitar el error "Property 'BskyAgent' does not exist..."
 const BskyAgent = (pkg as any).BskyAgent;

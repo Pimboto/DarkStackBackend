@@ -1,6 +1,6 @@
 // src/services/chatService.ts
-import SkywareClient from '../core/skywareClient.js';
-import logger from '../utils/logger.js';
+import SkywareClient from '../core/skywareClient.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Opciones para la configuración del manejador de mensajes

@@ -1,9 +1,9 @@
 // src/core/proxyManager.ts
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { HttpProxyAgent } from 'http-proxy-agent';
-import { ProxyConfig, ProxyInfo } from '../types/index.js';
-import { getProxyConfig } from '../config/config.js';
-import logger from '../utils/logger.js';
+import { ProxyConfig, ProxyInfo } from '../types/index.ts';
+import { getProxyConfig } from '../config/config.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Clase para gestionar la configuración y uso de proxies

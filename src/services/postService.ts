@@ -1,7 +1,7 @@
 // src/services/postService.ts
-import AtpClient from '../core/atpClient.js';
-import SkywareClient from '../core/skywareClient.js';
-import logger from '../utils/logger.js';
+import AtpClient from '../core/atpClient.ts';
+import SkywareClient from '../core/skywareClient.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Tipo de cliente a utilizar para crear posts

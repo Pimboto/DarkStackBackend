@@ -1,6 +1,6 @@
 // src/config/config.ts
-import { ProxyConfig } from '../types/index.js';
-import { getEnvVariable } from './env.js';
+import { ProxyConfig } from '../types/index.ts';
+import { getEnvVariable } from './env.ts';
 
 export const DEFAULT_SERVICE_URL = 'https://bsky.social';
 export const DEFAULT_SESSION_FILE_PATH = 'session.json';

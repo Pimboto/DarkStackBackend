@@ -1,10 +1,10 @@
 // src/workers/botWorkers.ts
 import { Job } from 'bullmq';
-import { createWorker, JobType } from '../services/queueService.js';
-import { initializeBsky, LogLevel } from '../index.js';
-import logger from '../utils/logger.js';
-import { SessionData } from '../types/index.js';
-import { createEngagementStrategy } from '../strategies/engagementStrategy.js';
+import { createWorker, JobType } from '../services/queueService.ts';
+import { initializeBsky, LogLevel } from '../index.ts';
+import logger from '../utils/logger.ts';
+import { SessionData } from '../types/index.ts';
+import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
 
 interface EngagementResult {
   success: boolean;

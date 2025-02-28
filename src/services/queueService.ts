@@ -1,8 +1,8 @@
 // src/services/queueService.ts
 import { Queue, Worker, Job, QueueEvents } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import { createRedisClient } from '../config/redis.js';
-import logger from '../utils/logger.js';
+import { createRedisClient } from '../config/redis.ts';
+import logger from '../utils/logger.ts';
 import { EventEmitter } from 'events';
 
 /**

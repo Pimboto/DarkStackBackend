@@ -1,7 +1,7 @@
 // src/strategies/engagementStrategy.ts
-import { EngagementOptions, SimulationResult, PlannedAction } from '../types/index.js';
-import { getRandomInt } from '../utils/random.js';
-import { getEngagementConfig } from '../config/config.js';
+import { EngagementOptions, SimulationResult, PlannedAction } from '../types/index.ts';
+import { getRandomInt } from '../utils/random.ts';
+import { getEngagementConfig } from '../config/config.ts';
 
 /**
  * Estrategia base para simular engagement

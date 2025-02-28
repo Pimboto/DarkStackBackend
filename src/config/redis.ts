@@ -1,7 +1,7 @@
 // src/config/redis.ts
 import Redis from 'ioredis';
-import { getEnvVariable } from './env.js';
-import logger from '../utils/logger.js';
+import { getEnvVariable } from './env.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Opciones de configuración para Redis

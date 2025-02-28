@@ -1,8 +1,8 @@
 // src/core/skywareClient.ts
-import { SkywareBot, ProxyConfig } from '../types/index.js';
-import ProxyManager from './proxyManager.js';
-import { DEFAULT_SERVICE_URL } from '../config/config.js';
-import logger from '../utils/logger.js';
+import { SkywareBot, ProxyConfig } from '../types/index.ts';
+import ProxyManager from './proxyManager.ts';
+import { DEFAULT_SERVICE_URL } from '../config/config.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Cliente para interactuar con Skyware Bot

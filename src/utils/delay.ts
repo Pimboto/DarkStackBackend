@@ -1,6 +1,6 @@
 // src/utils/delay.ts
-import { getRandomInt } from './random.js';
-import logger from './logger.js';
+import { getRandomInt } from './random.ts';
+import logger from './logger.ts';
 
 /**
  * Espera un número específico de milisegundos

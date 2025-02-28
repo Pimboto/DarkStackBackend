@@ -1,6 +1,6 @@
-import { initializeBsky, LogLevel } from '../index.js';
-import { createEngagementStrategy } from '../strategies/engagementStrategy.js';
-import logger from '../utils/logger.js';
+import { initializeBsky, LogLevel } from '../index.ts';
+import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Ejemplo de bot que simula engagement (likes y reposts)

@@ -1,44 +1,44 @@
 // src/index.ts
 // Exportar configuraciones
-export * from './config/config.js';
-export { getEnvVariable } from './config/env.js';
+export * from './config/config.ts';
+export { getEnvVariable } from './config/env.ts';
 
 // Exportar tipos
-export * from './types/index.js';
+export * from './types/index.ts';
 
 // Exportar clases principales
-export { default as AtpClient } from './core/atpClient.js';
-export { default as SkywareClient } from './core/skywareClient.js';
-export { default as ProxyManager } from './core/proxyManager.js';
+export { default as AtpClient } from './core/atpClient.ts';
+export { default as SkywareClient } from './core/skywareClient.ts';
+export { default as ProxyManager } from './core/proxyManager.ts';
 
 // Exportar servicios
-export { default as SessionService } from './services/sessionService.js';
-export { default as PostService } from './services/postService.js';
-export { default as ChatService } from './services/chatService.js';
-export { default as EngagementService } from './services/engagementService.js';
+export { default as SessionService } from './services/sessionService.ts';
+export { default as PostService } from './services/postService.ts';
+export { default as ChatService } from './services/chatService.ts';
+export { default as EngagementService } from './services/engagementService.ts';
 
 // Exportar estrategias
 export { 
   RandomEngagementStrategy, 
   HumanLikeEngagementStrategy,
   createEngagementStrategy
-} from './strategies/engagementStrategy.js';
+} from './strategies/engagementStrategy.ts';
 
 // Exportar utilidades
-export { default as logger } from './utils/logger.js';
-export * from './utils/delay.js';
-export * from './utils/random.js';
+export { default as logger } from './utils/logger.ts';
+export * from './utils/delay.ts';
+export * from './utils/random.ts';
 
 // Crear una función para inicializar todo el sistema
-import { getProxyConfig, getBskyCredentials } from './config/config.js';
-import AtpClient from './core/atpClient.js';
-import SkywareClient from './core/skywareClient.js';
-import SessionService from './services/sessionService.js';
-import PostService from './services/postService.js';
-import ChatService from './services/chatService.js';
-import EngagementService from './services/engagementService.js';
-import logger from './utils/logger.js';
-import { LogLevel } from './types/index.js';
+import { getProxyConfig, getBskyCredentials } from './config/config.ts';
+import AtpClient from './core/atpClient.ts';
+import SkywareClient from './core/skywareClient.ts';
+import SessionService from './services/sessionService.ts';
+import PostService from './services/postService.ts';
+import ChatService from './services/chatService.ts';
+import EngagementService from './services/engagementService.ts';
+import logger from './utils/logger.ts';
+import { LogLevel } from './types/index.ts';
 
 /**
  * Opciones para inicializar el cliente Bluesky

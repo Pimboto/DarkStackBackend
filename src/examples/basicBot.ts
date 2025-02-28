@@ -1,7 +1,7 @@
 // src/examples/basicBot.ts
 import dotenv from 'dotenv';
 import path from 'path';
-import { initializeBsky, LogLevel, logger } from '../index.js';
+import { initializeBsky, LogLevel, logger } from '../index.ts';
 
 // Load environment variables with detailed logging
 try {

@@ -1,11 +1,11 @@
 // src/app.ts
 import dotenv from 'dotenv';
 import path from 'path';
-import { startServer, stopServer } from './server/apiServer.js';
-import { closeAllQueues } from './services/queueService.js';
-import { closeRedisConnections } from './config/redis.js';
-import logger from './utils/logger.js';
-import { LogLevel } from './types/index.js';
+import { startServer, stopServer } from './server/apiServer.ts';
+import { closeAllQueues } from './services/queueService.ts';
+import { closeRedisConnections } from './config/redis.ts';
+import logger from './utils/logger.ts';
+import { LogLevel } from './types/index.ts';
 
 // Cargar variables de entorno
 try {
@@ -82,7 +82,7 @@ async function main() {
   try {
     logger.info('Starting Bluesky Bot API Server...');
 
-    const port = parseInt(process.env.PORT || '3000');
+    const port = parseInt(process.env.PORT ?? '3000');
     // Iniciar servidor
     await startServer(port);
 

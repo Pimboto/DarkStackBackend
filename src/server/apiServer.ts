@@ -17,9 +17,9 @@ import {
   getQueue,
   queueEmitter,
   JobType,
-} from '../services/queueService.js';
-import { createBotWorkers } from '../workers/botWorkers.js';
-import logger from '../utils/logger.js';
+} from '../services/queueService.ts';
+import { createBotWorkers } from '../workers/botWorkers.ts';
+import logger from '../utils/logger.ts';
 
 // Auxiliar: async/await en endpoints
 function customAsyncHandler<

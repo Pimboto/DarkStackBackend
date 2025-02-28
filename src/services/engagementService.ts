@@ -1,5 +1,5 @@
 // src/services/engagementService.ts
-import AtpClient from '../core/atpClient.js';
+import AtpClient from '../core/atpClient.ts';
 import { 
   EngagementOptions, 
   ActionType, 
@@ -7,11 +7,11 @@ import {
   SimulationResult, 
   EngagementResult,
   TimelinePost
-} from '../types/index.js';
-import { getEngagementConfig } from '../config/config.js';
-import { getRandomInt } from '../utils/random.js';
-import { sleep } from '../utils/delay.js';
-import logger from '../utils/logger.js';
+} from '../types/index.ts';
+import { getEngagementConfig } from '../config/config.ts';
+import { getRandomInt } from '../utils/random.ts';
+import { sleep } from '../utils/delay.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Servicio para simular y ejecutar acciones de engagement (likes, reposts)

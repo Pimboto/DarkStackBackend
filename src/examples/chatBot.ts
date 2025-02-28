@@ -1,6 +1,6 @@
 // src/examples/chatBot.ts
-import { initializeBsky, LogLevel } from '../index.js';
-import logger from '../utils/logger.js';
+import { initializeBsky, LogLevel } from '../index.ts';
+import logger from '../utils/logger.ts';
 
 /**
  * Ejemplo de bot que maneja conversaciones de chat
