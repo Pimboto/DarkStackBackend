@@ -3,7 +3,8 @@ import { Job } from 'bullmq';
 import { initializeBsky, LogLevel } from '../index.ts';
 import logger from '../utils/logger.ts';
 import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
-import { SessionData } from '../types/index.ts';
+import { SessionData, PlannedAction, EngagementResult } from '../types/index.ts';
+import { LoggerFunctions } from '../services/engagementService.ts';
 
 /**
  * Procesa un trabajo basicBot
@@ -181,6 +182,48 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
 
     await job.updateProgress(40);
     logger.info('Simulating engagement actions...');
+    
+    // Crear un logger personalizado que envíe los logs al job
+    // Crear funciones de logging que solo envíen los logs al job
+    const jobLogger: LoggerFunctions = {
+      info: (message: string, ...args: any[]) => {
+        const formattedMsg = formatLogMessage(message, args);
+        console.log(formattedMsg); // Esto será capturado y añadido al job
+      },
+      debug: (message: string, ...args: any[]) => {
+        const formattedMsg = formatLogMessage(message, args);
+        console.debug(formattedMsg); // Esto será capturado y añadido al job
+      },
+      warn: (message: string, ...args: any[]) => {
+        const formattedMsg = formatLogMessage(message, args);
+        console.warn(formattedMsg); // Esto será capturado y añadido al job
+      },
+      error: (message: string, ...args: any[]) => {
+        const formattedMsg = formatLogMessage(message, args);
+        console.error(formattedMsg); // Esto será capturado y añadido al job
+      }
+    };
+    
+    // Helper para formatear mensajes de log
+    function formatLogMessage(message: string, args: any[]): string {
+      if (args.length === 0) return message;
+      
+      try {
+        const formattedArgs = args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ');
+        return `${message} ${formattedArgs}`;
+      } catch (e) {
+        return `${message} [Error formatting args]`;
+      }
+    }
+    
+    // Crear una nueva instancia de EngagementService con el logger personalizado
+    const customEngagementService = new (engagementService.constructor as any)(
+      atpClient,
+      jobLogger
+    );
+    
     const simulationResult = strategy.simulate();
 
     await job.updateProgress(50);
@@ -199,28 +242,25 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
     };
 
     logger.info('Executing engagement actions...');
-    const results = await engagementService.executeEngagement(
+    const results = await customEngagementService.executeEngagement(
       simulationResult,
       {
         timelinePosts: timelineResponse.feed,
         stopOnError: false,
         dryRun: false,
+        progressCallback: async (action: PlannedAction, index: number) => {
+          // Aquí usamos console.log para que se capture con captureOutput: true
+          console.log(`Executing ${action.type} action #${index+1}`);
+          await reportActionProgress();
+        }
       }
     );
-
-    // Log de cada acción
-    for (let i = 0; i < results.length; i++) {
-      // Aquí usamos console.log para que se capture con captureOutput: true
-      console.log(`Executed ${results[i].action ?? '?'} action #${i}`);
-      await reportActionProgress();
-    }
-
     await job.updateProgress(100);
 
-    const successCount = results.filter((r) => r.success).length;
-    const likeCount = results.filter((r) => r.success && r.action === 'like').length;
-    const repostCount = results.filter((r) => r.success && r.action === 'repost').length;
-    const errorCount = results.filter((r) => !r.success).length;
+    const successCount = results.filter((r: EngagementResult) => r.success).length;
+    const likeCount = results.filter((r: EngagementResult) => r.success && r.action === 'like').length;
+    const repostCount = results.filter((r: EngagementResult) => r.success && r.action === 'repost').length;
+    const errorCount = results.filter((r: EngagementResult) => !r.success).length;
 
     return {
       success: true,

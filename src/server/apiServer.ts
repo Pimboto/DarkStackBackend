@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import http from "http";
 import cors from "cors";
 import helmet from "helmet";
-import { Server as SocketServer } from "socket.io";
+import { initializeSocketService, emitJobEvent, closeSocketService } from "../services/socketService.ts";
 // Corregir importaciones de Bull Board
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter.js";
@@ -211,8 +211,34 @@ apiRouter.get(
       return res.status(404).json({ error: "Job not found" });
     }
 
-    // Obtiene logs desde data.logs (captureOutput: true) si están disponibles
+    // Obtener logs de manera efectiva
     const logs = job.data?.logs || [];
+    
+    // Obtener logs de salida capturada en caso de que existan (captureOutput: true)
+    const outputLogs = await job.getChildrenValues();
+    let combinedLogs = [...logs];
+    
+    // Procesar logs de salida capturada si existen
+    if (outputLogs && outputLogs.length > 0) {
+      // Los logs capturados desde console.log, etc.
+      const capturedOutputLogs = outputLogs
+        .filter((output: unknown) => output && typeof output === "string")
+        .map((output: string) => ({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          message: output.trim(),
+          source: "captured"
+        }));
+      
+      combinedLogs = [...combinedLogs, ...capturedOutputLogs];
+    }
+    
+    // Ordenar logs por timestamp
+    combinedLogs.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
 
     return res.json({
       id: job.id,
@@ -231,7 +257,57 @@ apiRouter.get(
           : null,
       },
       returnvalue: job.returnvalue,
-      logs: logs, // Devuelve los logs capturados
+      logs: combinedLogs // Devuelve los logs mejorados
+    });
+  })
+);
+
+// Obtener logs de un job
+apiRouter.get(
+  "/jobs/:jobType/:jobId/logs",
+  customAsyncHandler(async (req, res) => {
+    const { jobType, jobId } = req.params;
+
+    if (!["basicBot", "chatBot", "engagementBot"].includes(jobType)) {
+      return res.status(400).json({ error: "Invalid job type" });
+    }
+
+    const job = await getJob(jobType as JobType, req.userId, jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    // Obtener logs de manera efectiva
+    const logs = job.data?.logs || [];
+    
+    // Obtener logs de salida capturada
+    const outputLogs = await job.getChildrenValues();
+    let combinedLogs = [...logs];
+    // Procesar logs de salida capturada si existen
+    if (outputLogs && outputLogs.length > 0) {
+      const capturedOutputLogs = outputLogs
+        .filter((output: unknown) => output && typeof output === "string")
+        .map((output: string) => ({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          message: output.trim(),
+          source: "captured"
+        }));
+      
+      combinedLogs = [...combinedLogs, ...capturedOutputLogs];
+    }
+    
+    // Ordenar logs por timestamp
+    combinedLogs.sort((a: { timestamp: string }, b: { timestamp: string }) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
+
+    return res.json({
+      jobId,
+      count: combinedLogs.length,
+      logs: combinedLogs
     });
   })
 );
@@ -321,104 +397,60 @@ if (process.env.NODE_ENV === "production") {
 
 app.use("/admin/queues", serverAdapter.getRouter());
 
-// Servidor HTTP y socket.io
+// Servidor HTTP
 let httpServer: http.Server | null = null;
-let io: SocketServer | null = null;
 
 /**
  * Inicia el servidor
  */
 export async function startServer(port = 3000): Promise<http.Server> {
-  // Verificar la conexión Redis al 
-
+  // Crear el servidor HTTP
   httpServer = http.createServer(app);
-
-  io = new SocketServer(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
-
-  // Middlware de socket
-  io.use((socket, next) => {
-    const userId =
-      socket.handshake.auth.userId || socket.handshake.query.userId;
-    if (!userId) {
-      return next(new Error("User ID is required"));
-    }
-    socket.data.userId = userId;
-    next();
-  });
-
-  // Manejamos conexiones socket
+  
+  // Inicializar el servicio de WebSockets
+  const io = initializeSocketService(httpServer);
+  
+  // Configurar el manejo de eventos para los sockets
   io.on("connection", (socket) => {
     const userId = socket.data.userId;
-    logger.info(`Socket connected: ${socket.id} for user ${userId}`);
-    socket.join(`user:${userId}`);
-
-    // init-workers
+    
+    // Inicialización de workers por usuario
     socket.on("init-workers", (data: { concurrency?: number }) => {
       const concurrency = data.concurrency ?? 5;
-      logger.info(
-        `Initializing workers for user ${userId}, concurrency ${concurrency}`
-      );
+      logger.info(`Inicializando workers para usuario ${userId}, concurrencia ${concurrency}`);
+      
+      // Crear workers para el usuario
       createBotWorkers(userId, concurrency);
-
-      // Creamos adaptadores BullMQ para visualizarlos en Bull Board
+      
+      // Crear adaptadores BullMQ para visualización en Bull Board
       const jobTypes: JobType[] = ["basicBot", "chatBot", "engagementBot"];
       jobTypes.forEach((jt) => createQueueAdapter(jt, userId));
-
+      
+      // Confirmar inicialización
       socket.emit("workers-initialized", {
         status: "success",
-        message: `Workers initialized for user ${userId}`,
+        message: `Workers inicializados para usuario ${userId}`,
       });
     });
-
-    socket.on("monitor-job", (data: { jobId: string; jobType: string }) => {
-      const { jobId, jobType } = data;
-      logger.debug(`User ${userId} monitoring job ${jobId} of type ${jobType}`);
-      socket.join(`job:${jobId}`);
+  });
+  
+  // Registrar listeners para todos los eventos de colas
+  const jobEvents = [
+    'job:added', 'job:started', 'job:progress', 'job:completed',
+    'job:failed', 'job:error', 'job:log'
+  ];
+  
+  // Configurar la emisión de eventos WebSocket para cada evento de job
+  jobEvents.forEach(eventName => {
+    queueEmitter.on(eventName, (jobInfo) => {
+      emitJobEvent(eventName, jobInfo);
     });
-
-    socket.on("disconnect", () => {
-      logger.info(`Socket disconnected: ${socket.id}`);
-    });
   });
-
-  // Eventos de la cola -> mandar a sockets
-  queueEmitter.on("job:added", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`).emit("job:added", jobInfo);
-  });
-  queueEmitter.on("job:started", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`)
-      .to(`job:${jobInfo.jobId}`)
-      .emit("job:started", jobInfo);
-  });
-  queueEmitter.on("job:progress", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`)
-      .to(`job:${jobInfo.jobId}`)
-      .emit("job:progress", jobInfo);
-  });
-  queueEmitter.on("job:completed", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`)
-      .to(`job:${jobInfo.jobId}`)
-      .emit("job:completed", jobInfo);
-  });
-  queueEmitter.on("job:failed", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`)
-      .to(`job:${jobInfo.jobId}`)
-      .emit("job:failed", jobInfo);
-  });
-  queueEmitter.on("job:error", (jobInfo) => {
-    io?.to(`user:${jobInfo.userId}`)
-      .to(`job:${jobInfo.jobId}`)
-      .emit("job:error", jobInfo);
-  });
-
+  
+  // Iniciar el servidor HTTP
   return new Promise((resolve) => {
     httpServer!.listen(port, () => {
-      logger.info(`API server listening on port ${port}`);
+      logger.info(`API server escuchando en puerto ${port}`);
       resolve(httpServer!);
     });
   });
@@ -428,14 +460,18 @@ export async function startServer(port = 3000): Promise<http.Server> {
  * Detiene el servidor si está en marcha
  */
 export async function stopServer(): Promise<void> {
+  // Cerrar el servicio de WebSockets
+  closeSocketService();
+  
+  // Cerrar el servidor HTTP
   if (httpServer) {
     return new Promise((resolve, reject) => {
       httpServer!.close((err) => {
         if (err) {
-          logger.error("Error stopping server:", err);
+          logger.error("Error al detener el servidor:", err);
           reject(err);
         } else {
-          logger.info("Server stopped");
+          logger.info("Servidor detenido correctamente");
           resolve();
         }
       });

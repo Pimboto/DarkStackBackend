@@ -1,10 +1,10 @@
 // src/services/engagementService.ts
 import AtpClient from '../core/atpClient.ts';
-import { 
-  EngagementOptions, 
-  ActionType, 
-  PlannedAction, 
-  SimulationResult, 
+import {
+  EngagementOptions,
+  ActionType,
+  PlannedAction,
+  SimulationResult,
   EngagementResult,
   TimelinePost
 } from '../types/index.ts';
@@ -14,14 +14,38 @@ import { sleep } from '../utils/delay.ts';
 import logger from '../utils/logger.ts';
 
 /**
+ * Interfaz para funciones de logger personalizadas
+ */
+export interface LoggerFunctions {
+  info: (message: string, ...args: any[]) => void;
+  debug: (message: string, ...args: any[]) => void;
+  warn: (message: string, ...args: any[]) => void;
+  error: (message: string, ...args: any[]) => void;
+}
+
+/**
  * Servicio para simular y ejecutar acciones de engagement (likes, reposts)
  */
 class EngagementService {
+  private logFns: LoggerFunctions;
+
   /**
    * Crea una nueva instancia del servicio de engagement
    * @param atpClient Cliente ATP para realizar las acciones
+   * @param customLogger Funciones de logger personalizadas (opcional)
    */
-  constructor(private readonly atpClient: AtpClient) {}
+  constructor(
+    private readonly atpClient: AtpClient,
+    customLogger?: LoggerFunctions
+  ) {
+    // Si se proporciona un logger personalizado, usarlo, de lo contrario usar el predeterminado
+    this.logFns = customLogger || {
+      info: logger.info.bind(logger),
+      debug: logger.debug.bind(logger),
+      warn: logger.warn.bind(logger),
+      error: logger.error.bind(logger)
+    };
+  }
 
   /**
    * Simula un plan de acciones de engagement
@@ -37,7 +61,7 @@ class EngagementService {
     const skipRange = options.skipRange ?? config.defaultSkipRange;
     const likePercentage = options.likePercentage ?? config.defaultLikePercentage;
     
-    logger.info(`Simulating ${numberOfActions} engagement actions (${likePercentage}% likes)...`);
+    this.logFns.info(`Simulating ${numberOfActions} engagement actions (${likePercentage}% likes)...`);
     
     // Calcular número de likes y reposts
     const likeCount = Math.floor(numberOfActions * (likePercentage / 100));
@@ -64,11 +88,11 @@ class EngagementService {
       
       totalTime += delay;
       
-      logger.debug(`Planned action ${i+1}: ${type}, Delay = ${delay}s, Skip = ${skip}`);
+      this.logFns.debug(`Planned action ${i+1}: ${type}, Delay = ${delay}s, Skip = ${skip}`);
     }
     
-    logger.info(`Simulation complete. Total time: ${totalTime}s`);
-    logger.info(`Actions: ${likeCount} likes, ${repostCount} reposts`);
+    this.logFns.info(`Simulation complete. Total time: ${totalTime}s`);
+    this.logFns.info(`Actions: ${likeCount} likes, ${repostCount} reposts`);
     
     return {
       plannedActions,
@@ -97,14 +121,14 @@ class EngagementService {
     const { dryRun = false, stopOnError = false, progressCallback } = options;
     
     // Obtener posts del timeline si no se proporcionaron
-    const timelinePosts = options.timelinePosts || 
+    const timelinePosts = options.timelinePosts ||
       (await this.atpClient.getTimeline(Math.max(50, plannedActions.length * 2))).feed;
     
     if (!timelinePosts || timelinePosts.length === 0) {
       throw new Error('No posts available for engagement actions');
     }
     
-    logger.info(`Starting execution of ${plannedActions.length} engagement actions (${dryRun ? 'DRY RUN' : 'REAL EXECUTION'})...`);
+    this.logFns.info(`Starting execution of ${plannedActions.length} engagement actions (${dryRun ? 'DRY RUN' : 'REAL EXECUTION'})...`);
     
     const results: EngagementResult[] = [];
     let currentPostIndex = 0;
@@ -113,7 +137,7 @@ class EngagementService {
     for (let i = 0; i < plannedActions.length; i++) {
       const action = plannedActions[i];
       try {
-        logger.info(`Executing action ${action.index + 1}: ${action.type} (delay: ${action.delay}s, skip: ${action.skip})`);
+        this.logFns.info(`Executing action ${action.index + 1}: ${action.type} (delay: ${action.delay}s, skip: ${action.skip})`);
         
         // Esperar el delay
         await sleep(action.delay * 1000);
@@ -122,13 +146,13 @@ class EngagementService {
         currentPostIndex += action.skip;
         if (currentPostIndex >= timelinePosts.length) {
           currentPostIndex = timelinePosts.length - 1;
-          logger.warn(`Skip value too high, using last available post (index: ${currentPostIndex})`);
+          this.logFns.warn(`Skip value too high, using last available post (index: ${currentPostIndex})`);
         }
     
         // Obtenemos el feedItem
         const feedItem = timelinePosts[currentPostIndex];
         if (!feedItem || !feedItem.post) {
-          logger.warn('feedItem invalid or missing .post. Skipping...');
+          this.logFns.warn('feedItem invalid or missing .post. Skipping...');
           continue;
         }
     
@@ -142,17 +166,17 @@ class EngagementService {
           ? rawPost.record.text
           : JSON.stringify(rawPost.record);
     
-        logger.info(`Selected post from @${authorHandle}: "${postText.substring(0, 50)}..."`);
+        this.logFns.info(`Selected post from @${authorHandle}: "${postText.substring(0, 50)}..."`);
     
         // Ejecutar acción
         let result: EngagementResult;
         if (!dryRun) {
           if (action.type === 'like') {
             await this.atpClient.likePost(postUri, postCid);
-            logger.info(`Liked post: ${postUri}`);
+            this.logFns.info(`Liked post: ${postUri}`);
           } else {
             await this.atpClient.repostPost(postUri, postCid);
-            logger.info(`Reposted post: ${postUri}`);
+            this.logFns.info(`Reposted post: ${postUri}`);
           }
           
           result = {
@@ -162,7 +186,7 @@ class EngagementService {
             postCid
           };
         } else {
-          logger.info(`[DRY RUN] Would have ${action.type}d post: ${postUri}`);
+          this.logFns.info(`[DRY RUN] Would have ${action.type}d post: ${postUri}`);
           result = {
             success: true,
             action: action.type,
@@ -182,7 +206,7 @@ class EngagementService {
         }
     
       } catch (error) {
-        logger.error(`Error executing ${action.type} action:`, error);
+        this.logFns.error(`Error executing ${action.type} action:`, error);
         const errorResult: EngagementResult = {
           success: false,
           action: action.type,
@@ -191,7 +215,7 @@ class EngagementService {
         results.push(errorResult);
     
         if (stopOnError) {
-          logger.warn('Stopping execution due to error');
+          this.logFns.warn('Stopping execution due to error');
           break;
         }
         
@@ -203,7 +227,7 @@ class EngagementService {
     }
     // Resumen de la ejecución
     const successCount = results.filter((r: EngagementResult) => r.success).length;
-    logger.info(`Engagement execution complete. Success: ${successCount}/${plannedActions.length}`);
+    this.logFns.info(`Engagement execution complete. Success: ${successCount}/${plannedActions.length}`);
     
     return results;
   }

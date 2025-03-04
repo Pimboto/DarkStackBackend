@@ -1,9 +1,10 @@
 // src/services/queueService.ts
 import { Queue, Worker, Job, QueueEvents, WorkerOptions } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import { createRedisClient, getRedisConfig } from '../config/redis.ts';
+import { getRedisConfig, getSharedRedisConnection } from '../config/redis.ts';
 import logger from '../utils/logger.ts';
 import { EventEmitter } from 'events';
+import { emitJobEvent } from './socketService.ts';
 
 // Importar processors directamente para evitar dependencias circulares
 import {
@@ -15,6 +16,15 @@ import {
 // Extender la interfaz WorkerOptions para incluir captureOutput
 interface ExtendedWorkerOptions extends WorkerOptions {
   captureOutput?: boolean;
+}
+
+/**
+ * Interfaz para mensajes de log capturados
+ */
+export interface JobLog {
+  timestamp: string;
+  message: string;
+  level: 'info' | 'error' | 'debug' | 'warn';
 }
 
 /**
@@ -60,18 +70,48 @@ function getQueueName(jobType: JobType, userId: string) {
 function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
   queueEvents.on('completed', ({ jobId, returnvalue }) => {
     const result = typeof returnvalue === 'string' ? JSON.parse(returnvalue) : returnvalue;
-    queueEmitter.emit('job:completed', { jobId, result, queueName });
+    const eventData = { jobId, result, queueName };
+    
+    // Emitir evento internamente
+    queueEmitter.emit('job:completed', eventData);
+    
+    // Emitir evento a través de WebSockets
+    emitJobEvent('job:completed', {
+      ...eventData,
+      userId: queueName.split('-').pop() || '',
+    });
+    
     logger.debug(`[${queueName}] Job ${jobId} completed`);
   });
 
   queueEvents.on('failed', ({ jobId, failedReason }) => {
-    queueEmitter.emit('job:failed', { jobId, error: failedReason, queueName });
+    const eventData = { jobId, error: failedReason, queueName };
+    
+    // Emitir evento internamente
+    queueEmitter.emit('job:failed', eventData);
+    
+    // Emitir evento a través de WebSockets
+    emitJobEvent('job:failed', {
+      ...eventData,
+      userId: queueName.split('-').pop() || '',
+    });
+    
     logger.error(`[${queueName}] Job ${jobId} failed: ${failedReason}`);
   });
 
   queueEvents.on('progress', ({ jobId, data }) => {
     const progress = typeof data === 'string' ? parseInt(data, 10) : data;
-    queueEmitter.emit('job:progress', { jobId, progress, queueName });
+    const eventData = { jobId, progress, queueName };
+    
+    // Emitir evento internamente
+    queueEmitter.emit('job:progress', eventData);
+    
+    // Emitir evento a través de WebSockets
+    emitJobEvent('job:progress', {
+      ...eventData,
+      userId: queueName.split('-').pop() || '',
+    });
+    
     logger.debug(`[${queueName}] Job ${jobId} progress: ${progress}`);
   });
 }
@@ -80,26 +120,58 @@ function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
  * Configura eventos Worker
  */
 function setupWorkerEvents(worker: Worker, queueName: string): void {
+  const userId = queueName.split('-').pop() || '';
+  
   worker.on('error', (err) => {
     logger.error(`[${queueName}] Worker error:`, err);
-    queueEmitter.emit('worker:error', { queueName, error: err.message });
+    
+    const eventData = { queueName, error: err.message };
+    
+    // Emitir evento internamente
+    queueEmitter.emit('worker:error', eventData);
+    
+    // Emitir evento a través de WebSockets
+    emitJobEvent('worker:error', {
+      ...eventData,
+      userId
+    });
   });
 
   worker.on('failed', (job, err) => {
     if (job) {
       logger.error(`[${queueName}] Job ${job.id} failed:`, err);
-      queueEmitter.emit('job:failed', {
+      
+      const eventData = {
         jobId: job.id,
         error: err.message,
         queueName,
         parentId: job.data.parentId || null,
+      };
+      
+      // Emitir evento internamente
+      queueEmitter.emit('job:failed', eventData);
+      
+      // Emitir evento a través de WebSockets
+      emitJobEvent('job:failed', {
+        ...eventData,
+        userId
       });
     }
   });
 
   worker.on('stalled', (jobId) => {
     logger.warn(`[${queueName}] Job ${jobId} stalled`);
-    queueEmitter.emit('job:stalled', { jobId, queueName });
+    
+    const eventData = { jobId, queueName };
+    
+    // Emitir evento internamente
+    queueEmitter.emit('job:stalled', eventData);
+    
+    // Emitir evento a través de WebSockets
+    emitJobEvent('job:stalled', {
+      ...eventData,
+      userId
+    });
   });
 }
 
@@ -112,16 +184,17 @@ export function getQueue(jobType: JobType, userId: string): Queue {
   if (!queueMap.has(queueKey)) {
     const queueName = getQueueName(jobType, userId);
     
-    // Create a specific connection for this queue
-    const connection = createRedisClient();
+    // Usar la conexión compartida Redis para todas las colas
+    // Esto mejora el rendimiento y reduce la sobrecarga de conexiones
+    const connection = getSharedRedisConnection();
 
     logger.info(`Creating queue '${queueName}' for user ${userId}`);
     
     // Log the Redis configuration being used
     const redisConfig = getRedisConfig();
-    logger.debug(`Queue '${queueName}' using Redis connection:`, 
-      redisConfig.url 
-        ? `URL: ***REDACTED***` 
+    logger.debug(`Queue '${queueName}' using shared Redis connection:`,
+      redisConfig.url
+        ? `URL: ***REDACTED***`
         : `Host: ${redisConfig.host}, Port: ${redisConfig.port}`
     );
 
@@ -130,7 +203,9 @@ export function getQueue(jobType: JobType, userId: string): Queue {
       defaultJobOptions: {
         attempts: 5,
         backoff: { type: 'exponential', delay: 5000 },
+        // Implementar limpieza automática: trabajos completados se eliminan después de 1 día o cuando hay más de 1000
         removeOnComplete: { age: 86400, count: 1000 },
+        // Trabajos fallidos se mantienen más tiempo (7 días) para diagnóstico
         removeOnFail: { age: 604800, count: 3000 },
       },
     };
@@ -138,7 +213,7 @@ export function getQueue(jobType: JobType, userId: string): Queue {
     const queue = new Queue(queueName, queueOpts);
     queueMap.set(queueKey, queue);
 
-    // QueueEvents con la misma conexión
+    // QueueEvents con la misma conexión compartida
     const queueEvents = new QueueEvents(queueName, { connection });
     setupQueueEvents(queueEvents, queueName);
     queueEventsMap.set(queueKey, queueEvents);
@@ -151,6 +226,45 @@ export function getQueue(jobType: JobType, userId: string): Queue {
   }
 
   return queueMap.get(queueKey)!;
+}
+
+/**
+ * Helper para añadir un log al job
+ */
+async function addJobLog(job: Job, level: 'info' | 'error' | 'debug' | 'warn', message: string): Promise<void> {
+  if (!job || !job.id) return;
+  
+  const timestamp = new Date().toISOString();
+  const logEntry: JobLog = {
+    timestamp,
+    level,
+    message,
+  };
+
+  // Inicializar array de logs si no existe
+  const logs = job.data.logs || [];
+  logs.push(logEntry);
+
+  // Actualizar el job con el nuevo log
+  await job.updateData({
+    ...job.data,
+    logs,
+  });
+
+  // Preparar datos del evento
+  const eventData = {
+    jobId: job.id,
+    userId: job.data.userId,
+    log: logEntry,
+    parentId: job.data.parentId || null,
+    jobType: job.name,
+  };
+
+  // Emitir evento interno
+  queueEmitter.emit('job:log', eventData);
+  
+  // Emitir evento de log vía WebSockets
+  emitJobEvent('job:log', eventData);
 }
 
 /**
@@ -180,14 +294,14 @@ export function createWorker(
     `Creating worker for queue '${queueName}' concurrency=${concurrency}`
   );
 
-  // Create a new connection for this worker
-  const connection = createRedisClient();
+  // Usar la conexión compartida para todos los workers
+  const connection = getSharedRedisConnection();
   
   // Log the Redis configuration being used
   const redisConfig = getRedisConfig();
-  logger.debug(`Worker for '${queueName}' using Redis connection:`, 
-    redisConfig.url 
-      ? `URL: ***REDACTED***` 
+  logger.debug(`Worker for '${queueName}' using shared Redis connection:`,
+    redisConfig.url
+      ? `URL: ***REDACTED***`
       : `Host: ${redisConfig.host}, Port: ${redisConfig.port}`
   );
 
@@ -200,7 +314,7 @@ export function createWorker(
     maxStalledCount: 2,
     lockDuration: 60000,
     drainDelay: 5,
-    // Habilitar captura de logs
+    // Habilitar captura de logs de consola
     captureOutput: true
   };
 
@@ -208,6 +322,17 @@ export function createWorker(
     queueName,
     async (job: Job<any, any, any>) => {
       try {
+        // Inicializar array de logs en job.data si no existe
+        if (!job.data.logs) {
+          await job.updateData({
+            ...job.data,
+            logs: [],
+          });
+        }
+
+        // Añadir log de inicio
+        await addJobLog(job, 'info', `Starting ${jobType} job ${job.id}`);
+
         queueEmitter.emit('job:started', {
           jobId: job.id,
           userId,
@@ -216,13 +341,85 @@ export function createWorker(
           parentId: job.data.parentId || null,
         });
 
-        return await processor(job);
+        // Interceptar console.log, console.error, etc. y capturarlos como logs del job
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        const originalConsoleDebug = console.debug;
+
+        // Redefinir console.log para capturar en logs del job
+        console.log = (...args: any[]) => {
+          const message = args.map(arg =>
+            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+          ).join(' ');
+          
+          // Llamar al original
+          originalConsoleLog.apply(console, args);
+          
+          // Añadir a logs del job (sin await para no bloquear)
+          addJobLog(job, 'info', message).catch(err =>
+            originalConsoleError(`Error adding job log: ${err}`)
+          );
+        };
+
+        console.error = (...args: any[]) => {
+          const message = args.map(arg =>
+            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+          ).join(' ');
+          
+          originalConsoleError.apply(console, args);
+          addJobLog(job, 'error', message).catch(err =>
+            originalConsoleError(`Error adding job log: ${err}`)
+          );
+        };
+
+        console.warn = (...args: any[]) => {
+          const message = args.map(arg =>
+            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+          ).join(' ');
+          
+          originalConsoleWarn.apply(console, args);
+          addJobLog(job, 'warn', message).catch(err =>
+            originalConsoleError(`Error adding job log: ${err}`)
+          );
+        };
+
+        console.debug = (...args: any[]) => {
+          const message = args.map(arg =>
+            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+          ).join(' ');
+          
+          originalConsoleDebug.apply(console, args);
+          addJobLog(job, 'debug', message).catch(err =>
+            originalConsoleError(`Error adding job log: ${err}`)
+          );
+        };
+
+        try {
+          // Llamar al procesador con el job
+          const result = await processor(job);
+          
+          // Añadir log de finalización exitosa
+          await addJobLog(job, 'info', `Job ${job.id} completed successfully`);
+          
+          return result;
+        } finally {
+          // Restaurar console.log original
+          console.log = originalConsoleLog;
+          console.error = originalConsoleError;
+          console.warn = originalConsoleWarn;
+          console.debug = originalConsoleDebug;
+        }
       } catch (err: any) {
+        // Log del error
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        await addJobLog(job, 'error', `Job failed: ${errorMessage}`);
+        
         queueEmitter.emit('job:error', {
           jobId: job.id,
           userId,
           jobType,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage,
           parentId: job.data.parentId || null,
         });
         throw err;
