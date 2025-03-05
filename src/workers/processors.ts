@@ -6,10 +6,8 @@ import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
 import { SessionData, PlannedAction, EngagementResult } from '../types/index.ts';
 import { LoggerFunctions } from '../services/engagementService.ts';
 import { updateAccountTokens } from '../config/supabase.ts';
-import pkg from '@atproto/api';
 
 // Forzamos a any para evitar el error "Property 'BskyAgent' does not exist..."
-const BskyAgent = (pkg as any).BskyAgent;
 
 /**
  * Procesa un trabajo basicBot
@@ -19,7 +17,12 @@ export async function basicBotProcessor(job: Job): Promise<any> {
   await job.updateProgress(10);
 
   try {
-    const { sessionData, message } = job.data;
+    const {
+      sessionData,
+      message,
+      accountMetadata // Nueva metadata de la cuenta para manejar refrescar tokens
+    } = job.data;
+    
     if (!sessionData) {
       throw new Error('No session data provided in job');
     }
@@ -29,12 +32,109 @@ export async function basicBotProcessor(job: Job): Promise<any> {
       autoLogin: false,
     });
 
-    await job.updateProgress(30);
+    await job.updateProgress(20);
 
-    const resumed = await atpClient.resumeSession(sessionData as SessionData);
-    if (!resumed) {
-      throw new Error('Failed to resume session');
+    // ===== GESTIÓN DE AUTENTICACIÓN MEJORADA =====
+    // Implementamos tres métodos de autenticación en orden
+    let sessionResumed = false;
+    let resumeError: unknown = null;
+
+    // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
+    try {
+      logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
+      
+      if (sessionData.refreshJwt) {
+        // Intentar refrescar el token primero
+        const refreshedSession = await atpClient.refreshSession(sessionData as SessionData);
+        
+        if (refreshedSession) {
+          // Si llegamos aquí, el token se refrescó con éxito
+          sessionResumed = true;
+          
+          // Actualizar sessionData con los nuevos tokens
+          sessionData.accessJwt = refreshedSession.accessJwt;
+          sessionData.refreshJwt = refreshedSession.refreshJwt;
+          sessionData.did = refreshedSession.did;
+          
+          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          if (accountMetadata && accountMetadata.accountId) {
+            await updateAccountTokens(
+              accountMetadata.accountId,
+              refreshedSession.accessJwt,
+              refreshedSession.refreshJwt
+            );
+            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+          }
+          
+          logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
+        }
+      } else {
+        logger.warn(`No hay refreshJwt disponible para ${sessionData.handle}, saltando al método 2`);
+      }
+    } catch (error: unknown) {
+      resumeError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`Falló al refrescar token con atpClient: ${errorMessage}`);
     }
+
+    // 2. MÉTODO 2: Intentar resumir la sesión normalmente si el primer método falló
+    if (!sessionResumed) {
+      try {
+        logger.info(`[Método 2] Intentando reanudar sesión para ${sessionData.handle} usando atpClient`);
+        sessionResumed = await atpClient.resumeSession(sessionData as SessionData);
+        
+        if (sessionResumed) {
+          logger.info(`Sesión reanudada correctamente usando atpClient.resumeSession`);
+        }
+      } catch (error: unknown) {
+        resumeError = error;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Falló al reanudar sesión con atpClient: ${errorMessage}`);
+      }
+    }
+
+    // 3. MÉTODO 3: Realizar login completo si todo lo anterior falló
+    if (!sessionResumed && accountMetadata && accountMetadata.password) {
+      try {
+        logger.info(`[Método 3] Intentando login completo para ${sessionData.handle}`);
+        
+        // Login con atpClient
+        const loginResult = await atpClient.login(sessionData.handle, accountMetadata.password);
+        
+        // Actualizar sessionData
+        sessionData.accessJwt = loginResult.accessJwt;
+        sessionData.refreshJwt = loginResult.refreshJwt;
+        sessionData.did = loginResult.did;
+        
+        // Actualizar tokens en la base de datos
+        if (accountMetadata.accountId) {
+          await updateAccountTokens(
+            accountMetadata.accountId,
+            loginResult.accessJwt,
+            loginResult.refreshJwt
+          );
+          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+        }
+        
+        sessionResumed = true;
+        logger.info(`Sesión iniciada correctamente mediante login completo`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Login falló: ${errorMessage}`);
+        throw new Error(`Todos los métodos de autenticación fallaron. Último error: ${errorMessage}`);
+      }
+    }
+
+    // Si ningún método funcionó, lanzar error
+    if (!sessionResumed) {
+      const errorMsg = resumeError instanceof Error
+        ? resumeError.message
+        : (resumeError ? String(resumeError) : 'Error desconocido');
+        
+      throw new Error(`No se pudo reanudar la sesión: ${errorMsg}`);
+    }
+
+    await job.updateProgress(30);
 
     await job.updateProgress(50);
 
@@ -74,7 +174,13 @@ export async function chatBotProcessor(job: Job): Promise<any> {
   await job.updateProgress(10);
 
   try {
-    const { sessionData, messages, recipients } = job.data;
+    const {
+      sessionData,
+      messages,
+      recipients,
+      accountMetadata // Nueva metadata de la cuenta para manejar refrescar tokens
+    } = job.data;
+    
     if (!sessionData) {
       throw new Error('No session data provided in job');
     }
@@ -91,12 +197,109 @@ export async function chatBotProcessor(job: Job): Promise<any> {
       enableChat: true,
     });
 
-    await job.updateProgress(30);
+    await job.updateProgress(20);
 
-    const resumed = await atpClient.resumeSession(sessionData as SessionData);
-    if (!resumed) {
-      throw new Error('Failed to resume session');
+    // ===== GESTIÓN DE AUTENTICACIÓN MEJORADA =====
+    // Implementamos tres métodos de autenticación en orden
+    let sessionResumed = false;
+    let resumeError: unknown = null;
+
+    // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
+    try {
+      logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
+      
+      if (sessionData.refreshJwt) {
+        // Intentar refrescar el token primero
+        const refreshedSession = await atpClient.refreshSession(sessionData as SessionData);
+        
+        if (refreshedSession) {
+          // Si llegamos aquí, el token se refrescó con éxito
+          sessionResumed = true;
+          
+          // Actualizar sessionData con los nuevos tokens
+          sessionData.accessJwt = refreshedSession.accessJwt;
+          sessionData.refreshJwt = refreshedSession.refreshJwt;
+          sessionData.did = refreshedSession.did;
+          
+          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          if (accountMetadata && accountMetadata.accountId) {
+            await updateAccountTokens(
+              accountMetadata.accountId,
+              refreshedSession.accessJwt,
+              refreshedSession.refreshJwt
+            );
+            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+          }
+          
+          logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
+        }
+      } else {
+        logger.warn(`No hay refreshJwt disponible para ${sessionData.handle}, saltando al método 2`);
+      }
+    } catch (error: unknown) {
+      resumeError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`Falló al refrescar token con atpClient: ${errorMessage}`);
     }
+
+    // 2. MÉTODO 2: Intentar resumir la sesión normalmente si el primer método falló
+    if (!sessionResumed) {
+      try {
+        logger.info(`[Método 2] Intentando reanudar sesión para ${sessionData.handle} usando atpClient`);
+        sessionResumed = await atpClient.resumeSession(sessionData as SessionData);
+        
+        if (sessionResumed) {
+          logger.info(`Sesión reanudada correctamente usando atpClient.resumeSession`);
+        }
+      } catch (error: unknown) {
+        resumeError = error;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Falló al reanudar sesión con atpClient: ${errorMessage}`);
+      }
+    }
+
+    // 3. MÉTODO 3: Realizar login completo si todo lo anterior falló
+    if (!sessionResumed && accountMetadata && accountMetadata.password) {
+      try {
+        logger.info(`[Método 3] Intentando login completo para ${sessionData.handle}`);
+        
+        // Login con atpClient
+        const loginResult = await atpClient.login(sessionData.handle, accountMetadata.password);
+        
+        // Actualizar sessionData
+        sessionData.accessJwt = loginResult.accessJwt;
+        sessionData.refreshJwt = loginResult.refreshJwt;
+        sessionData.did = loginResult.did;
+        
+        // Actualizar tokens en la base de datos
+        if (accountMetadata.accountId) {
+          await updateAccountTokens(
+            accountMetadata.accountId,
+            loginResult.accessJwt,
+            loginResult.refreshJwt
+          );
+          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+        }
+        
+        sessionResumed = true;
+        logger.info(`Sesión iniciada correctamente mediante login completo`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Login falló: ${errorMessage}`);
+        throw new Error(`Todos los métodos de autenticación fallaron. Último error: ${errorMessage}`);
+      }
+    }
+
+    // Si ningún método funcionó, lanzar error
+    if (!sessionResumed) {
+      const errorMsg = resumeError instanceof Error
+        ? resumeError.message
+        : (resumeError ? String(resumeError) : 'Error desconocido');
+        
+      throw new Error(`No se pudo reanudar la sesión: ${errorMsg}`);
+    }
+
+    await job.updateProgress(30);
 
     await job.updateProgress(50);
 
@@ -182,68 +385,57 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
     let sessionResumed = false;
     let resumeError: unknown = null;
 
-    // 1. MÉTODO 1: Usar atpClient.resumeSession (método estándar)
+    // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
     try {
-      logger.info(`[Método 1] Intentando reanudar sesión para ${sessionData.handle} usando atpClient`);
-      sessionResumed = await atpClient.resumeSession(sessionData as SessionData);
+      logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
       
-      if (sessionResumed) {
-        logger.info(`Sesión reanudada correctamente usando atpClient.resumeSession`);
+      if (sessionData.refreshJwt) {
+        // Intentar refrescar el token primero
+        const refreshedSession = await atpClient.refreshSession(sessionData as SessionData);
+        
+        if (refreshedSession) {
+          // Si llegamos aquí, el token se refrescó con éxito
+          sessionResumed = true;
+          
+          // Actualizar sessionData con los nuevos tokens
+          sessionData.accessJwt = refreshedSession.accessJwt;
+          sessionData.refreshJwt = refreshedSession.refreshJwt;
+          sessionData.did = refreshedSession.did;
+          
+          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          if (accountMetadata && accountMetadata.accountId) {
+            await updateAccountTokens(
+              accountMetadata.accountId,
+              refreshedSession.accessJwt,
+              refreshedSession.refreshJwt
+            );
+            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+          }
+          
+          logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
+        }
+      } else {
+        logger.warn(`No hay refreshJwt disponible para ${sessionData.handle}, saltando al método 2`);
       }
     } catch (error: unknown) {
       resumeError = error;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.warn(`Falló al reanudar sesión con atpClient: ${errorMessage}`);
+      logger.warn(`Falló al refrescar token con atpClient: ${errorMessage}`);
     }
 
-    // 2. MÉTODO 2: Usar BskyAgent directamente si el primer método falló
-    if (!sessionResumed && accountMetadata && sessionData.refreshJwt) {
+    // 2. MÉTODO 2: Intentar resumir la sesión normalmente si el primer método falló
+    if (!sessionResumed) {
       try {
-        logger.info(`[Método 2] Intentando BskyAgent.resumeSession para ${sessionData.handle}`);
+        logger.info(`[Método 2] Intentando reanudar sesión para ${sessionData.handle} usando atpClient`);
+        sessionResumed = await atpClient.resumeSession(sessionData as SessionData);
         
-        // Crear nueva instancia de BskyAgent
-        const endpoint = accountMetadata.endpoint || 'https://bsky.social';
-        const agent = new BskyAgent({
-          service: endpoint
-        });
-        
-        // Intentar resumir sesión directamente
-        await agent.resumeSession({
-          did: sessionData.did || '',
-          handle: sessionData.handle,
-          email: sessionData.email || '',
-          accessJwt: sessionData.accessJwt,
-          refreshJwt: sessionData.refreshJwt
-        });
-        
-        // Si llegamos aquí, la sesión se resumió con éxito
-        sessionResumed = true;
-        
-        // Actualizar sessionData con los nuevos tokens
-        sessionData.accessJwt = agent.session.accessJwt;
-        sessionData.refreshJwt = agent.session.refreshJwt;
-        sessionData.did = agent.session.did;
-        
-        // Actualizar tokens en la base de datos
-        if (accountMetadata.accountId) {
-          await updateAccountTokens(
-            accountMetadata.accountId,
-            agent.session.accessJwt,
-            agent.session.refreshJwt
-          );
-          logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+        if (sessionResumed) {
+          logger.info(`Sesión reanudada correctamente usando atpClient.resumeSession`);
         }
-        
-        // Volver a intentar con atpClient
-        sessionResumed = await atpClient.resumeSession({
-          ...sessionData,
-          did: agent.session.did
-        } as SessionData);
-        
-        logger.info(`Sesión reanudada con éxito usando BskyAgent`);
       } catch (error: unknown) {
+        resumeError = error;
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Falló el intento de reanudación directo: ${errorMessage}`);
+        logger.warn(`Falló al reanudar sesión con atpClient: ${errorMessage}`);
       }
     }
 

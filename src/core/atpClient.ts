@@ -71,6 +71,42 @@ class AtpClient {
   }
 
   /**
+   * Refresca los tokens de una sesión
+   * @param session Datos de la sesión actual
+   * @returns La sesión actualizada con nuevos tokens, o null si falla
+   */
+  async refreshSession(session: SessionData): Promise<SessionData | null> {
+    try {
+      logger.debug(`Refreshing token for session: ${session.handle}`);
+      
+      // Intentar refrescar la sesión
+      await this.agent.resumeSession({
+        did: session.did || '',
+        handle: session.handle,
+        email: session.email || '',
+        accessJwt: session.accessJwt,
+        refreshJwt: session.refreshJwt
+      });
+      
+      // Si llegamos aquí, la sesión se refrescó con éxito
+      // Obtener los nuevos tokens del agente
+      const refreshedSession: SessionData = {
+        ...session,
+        accessJwt: this.agent.session.accessJwt,
+        refreshJwt: this.agent.session.refreshJwt,
+        did: this.agent.session.did
+      };
+      
+      logger.info(`Token refreshed successfully for: ${session.handle}`);
+      return refreshedSession;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to refresh token: ${errorMessage}`);
+      return null;
+    }
+  }
+
+  /**
    * Reanuda una sesión existente
    * @param session Datos de la sesión
    * @returns true si la sesión se reanudó correctamente
