@@ -5,6 +5,11 @@ import logger from '../utils/logger.ts';
 import { createEngagementStrategy } from '../strategies/engagementStrategy.ts';
 import { SessionData, PlannedAction, EngagementResult } from '../types/index.ts';
 import { LoggerFunctions } from '../services/engagementService.ts';
+import { updateAccountTokens } from '../config/supabase.ts';
+import pkg from '@atproto/api';
+
+// Forzamos a any para evitar el error "Property 'BskyAgent' does not exist..."
+const BskyAgent = (pkg as any).BskyAgent;
 
 /**
  * Procesa un trabajo basicBot
@@ -152,11 +157,19 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
   await job.updateProgress(10);
 
   try {
-    const { sessionData, engagementOptions = {}, strategyType = 'human-like' } = job.data;
+    const { 
+      sessionData, 
+      engagementOptions = {}, 
+      strategyType = 'human-like',
+      accountMetadata // Nueva metadata de la cuenta
+    } = job.data;
+    
     if (!sessionData) {
       throw new Error('No session data provided in job');
     }
 
+    logger.info(`Processing engagement for account: ${sessionData.handle}`);
+    
     const { atpClient, engagementService } = await initializeBsky({
       logLevel: LogLevel.DEBUG,
       autoLogin: false,
@@ -164,9 +177,115 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
 
     await job.updateProgress(20);
 
-    const resumed = await atpClient.resumeSession(sessionData as SessionData);
-    if (!resumed) {
-      throw new Error('Failed to resume session');
+    // ===== GESTIÓN DE AUTENTICACIÓN MEJORADA =====
+    // Implementamos tres métodos de autenticación en orden
+    let sessionResumed = false;
+    let resumeError: unknown = null;
+
+    // 1. MÉTODO 1: Usar atpClient.resumeSession (método estándar)
+    try {
+      logger.info(`[Método 1] Intentando reanudar sesión para ${sessionData.handle} usando atpClient`);
+      sessionResumed = await atpClient.resumeSession(sessionData as SessionData);
+      
+      if (sessionResumed) {
+        logger.info(`Sesión reanudada correctamente usando atpClient.resumeSession`);
+      }
+    } catch (error: unknown) {
+      resumeError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`Falló al reanudar sesión con atpClient: ${errorMessage}`);
+    }
+
+    // 2. MÉTODO 2: Usar BskyAgent directamente si el primer método falló
+    if (!sessionResumed && accountMetadata && sessionData.refreshJwt) {
+      try {
+        logger.info(`[Método 2] Intentando BskyAgent.resumeSession para ${sessionData.handle}`);
+        
+        // Crear nueva instancia de BskyAgent
+        const endpoint = accountMetadata.endpoint || 'https://bsky.social';
+        const agent = new BskyAgent({
+          service: endpoint
+        });
+        
+        // Intentar resumir sesión directamente
+        await agent.resumeSession({
+          did: sessionData.did || '',
+          handle: sessionData.handle,
+          email: sessionData.email || '',
+          accessJwt: sessionData.accessJwt,
+          refreshJwt: sessionData.refreshJwt
+        });
+        
+        // Si llegamos aquí, la sesión se resumió con éxito
+        sessionResumed = true;
+        
+        // Actualizar sessionData con los nuevos tokens
+        sessionData.accessJwt = agent.session.accessJwt;
+        sessionData.refreshJwt = agent.session.refreshJwt;
+        sessionData.did = agent.session.did;
+        
+        // Actualizar tokens en la base de datos
+        if (accountMetadata.accountId) {
+          await updateAccountTokens(
+            accountMetadata.accountId,
+            agent.session.accessJwt,
+            agent.session.refreshJwt
+          );
+          logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+        }
+        
+        // Volver a intentar con atpClient
+        sessionResumed = await atpClient.resumeSession({
+          ...sessionData,
+          did: agent.session.did
+        } as SessionData);
+        
+        logger.info(`Sesión reanudada con éxito usando BskyAgent`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Falló el intento de reanudación directo: ${errorMessage}`);
+      }
+    }
+
+    // 3. MÉTODO 3: Realizar login completo si todo lo anterior falló
+    if (!sessionResumed && accountMetadata && accountMetadata.password) {
+      try {
+        logger.info(`[Método 3] Intentando login completo para ${sessionData.handle}`);
+        
+        // Login con atpClient
+        const loginResult = await atpClient.login(sessionData.handle, accountMetadata.password);
+        
+        // Actualizar sessionData
+        sessionData.accessJwt = loginResult.accessJwt;
+        sessionData.refreshJwt = loginResult.refreshJwt;
+        sessionData.did = loginResult.did;
+        
+        // Actualizar tokens en la base de datos
+        if (accountMetadata.accountId) {
+          await updateAccountTokens(
+            accountMetadata.accountId,
+            loginResult.accessJwt,
+            loginResult.refreshJwt
+          );
+          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+        }
+        
+        sessionResumed = true;
+        logger.info(`Sesión iniciada correctamente mediante login completo`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Login falló: ${errorMessage}`);
+        throw new Error(`Todos los métodos de autenticación fallaron. Último error: ${errorMessage}`);
+      }
+    }
+
+    // Si ningún método funcionó, lanzar error
+    if (!sessionResumed) {
+      const errorMsg = resumeError instanceof Error 
+        ? resumeError.message 
+        : (resumeError ? String(resumeError) : 'Error desconocido');
+        
+      throw new Error(`No se pudo reanudar la sesión: ${errorMsg}`);
     }
 
     await job.updateProgress(30);
@@ -184,7 +303,20 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
     logger.info('Simulating engagement actions...');
     
     // Crear un logger personalizado que envíe los logs al job
-    // Crear funciones de logging que solo envíen los logs al job
+    // Helper para formatear mensajes de log
+    function formatLogMessage(message: string, args: any[]): string {
+      if (args.length === 0) return message;
+      
+      try {
+        const formattedArgs = args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ');
+        return `${message} ${formattedArgs}`;
+      } catch (e) {
+        return `${message} [Error formatting args]`;
+      }
+    }
+    
     const jobLogger: LoggerFunctions = {
       info: (message: string, ...args: any[]) => {
         const formattedMsg = formatLogMessage(message, args);
@@ -203,20 +335,6 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
         console.error(formattedMsg); // Esto será capturado y añadido al job
       }
     };
-    
-    // Helper para formatear mensajes de log
-    function formatLogMessage(message: string, args: any[]): string {
-      if (args.length === 0) return message;
-      
-      try {
-        const formattedArgs = args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-        ).join(' ');
-        return `${message} ${formattedArgs}`;
-      } catch (e) {
-        return `${message} [Error formatting args]`;
-      }
-    }
     
     // Crear una nueva instancia de EngagementService con el logger personalizado
     const customEngagementService = new (engagementService.constructor as any)(
@@ -265,6 +383,10 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
     return {
       success: true,
       message: 'Engagement bot job completed',
+      account: accountMetadata ? {
+        id: accountMetadata.accountId,
+        username: sessionData.handle
+      } : undefined,
       stats: {
         totalActions,
         successCount,

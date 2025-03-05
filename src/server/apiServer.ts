@@ -190,7 +190,7 @@ apiRouter.post(
           accountId: account.id,
           proxy: account.proxy,
           userAgent: account.user_agent,
-          endpoint: account.endpoint || "https://bsky.social",
+          endpoint: account.endpoint ?? "https://bsky.social",
           password: account.password,
         };
 
