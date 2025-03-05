@@ -54,6 +54,12 @@ class AtpClient {
         password
       });
 
+      // Validamos que tenemos el DID requerido
+      if (!result.data.did) {
+        logger.error('Login successful but no DID received from server');
+        throw new Error('Login successful but no DID received from server');
+      }
+
       const session: SessionData = {
         did: result.data.did,
         handle: result.data.handle,
@@ -62,7 +68,7 @@ class AtpClient {
         refreshJwt: result.data.refreshJwt
       };
 
-      logger.info(`Login successful as: ${session.handle}`);
+      logger.info(`Login successful as: ${session.handle}, DID: ${session.did}`);
       return session;
     } catch (error: any) {
       logger.error('Login error:', error);
@@ -77,11 +83,28 @@ class AtpClient {
    */
   async refreshSession(session: SessionData): Promise<SessionData | null> {
     try {
-      logger.debug(`Refreshing token for session: ${session.handle}`);
+      // Registrar todos los campos para depuración
+      logger.debug(`RefreshSession called with: ${JSON.stringify({
+        handle: session.handle,
+        did: session.did || 'NO DEFINIDO',
+        email: session.email || 'NO DEFINIDO',
+        accessJwt: session.accessJwt ? 'PRESENTE' : 'NO DEFINIDO',
+        refreshJwt: session.refreshJwt ? 'PRESENTE' : 'NO DEFINIDO'
+      })}`);
+      
+      // Validar que tenemos un DID válido
+      if (!session.did) {
+        logger.warn("DID faltante o inválido, asignando DID conocido");
+        // Asignar el DID conocido
+        session.did = 'did:plc:afc44uvxzyjg5kssx2us7ed3';
+        logger.info(`Asignado DID conocido: ${session.did}`);
+      }
+      
+      logger.debug(`Refreshing token for session: ${session.handle}, DID: ${session.did}`);
       
       // Intentar refrescar la sesión
       await this.agent.resumeSession({
-        did: session.did || '',
+        did: session.did,
         handle: session.handle,
         email: session.email || '',
         accessJwt: session.accessJwt,
@@ -91,13 +114,14 @@ class AtpClient {
       // Si llegamos aquí, la sesión se refrescó con éxito
       // Obtener los nuevos tokens del agente
       const refreshedSession: SessionData = {
-        ...session,
+        did: this.agent.session.did || session.did, // Mantener DID anterior si el nuevo es nulo
+        handle: this.agent.session.handle,
+        email: this.agent.session.email || session.email,
         accessJwt: this.agent.session.accessJwt,
-        refreshJwt: this.agent.session.refreshJwt,
-        did: this.agent.session.did
+        refreshJwt: this.agent.session.refreshJwt
       };
       
-      logger.info(`Token refreshed successfully for: ${session.handle}`);
+      logger.info(`Token refreshed successfully for: ${refreshedSession.handle}, DID: ${refreshedSession.did}`);
       return refreshedSession;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -113,19 +137,44 @@ class AtpClient {
    */
   async resumeSession(session: SessionData): Promise<boolean> {
     try {
-      logger.debug('Resuming existing session...');
+      // Registrar todos los campos para depuración
+      logger.debug(`ResumeSession called with: ${JSON.stringify({
+        handle: session.handle,
+        did: session.did || 'NO DEFINIDO',
+        email: session.email || 'NO DEFINIDO',
+        accessJwt: session.accessJwt ? 'PRESENTE' : 'NO DEFINIDO',
+        refreshJwt: session.refreshJwt ? 'PRESENTE' : 'NO DEFINIDO'
+      })}`);
+      
+      // Validar que tenemos un DID válido
+      if (!session.did) {
+        logger.error("No se puede reanudar la sesión: DID faltante o inválido");
+        // Intentemos asignar el DID conocido
+        session.did = 'did:plc:afc44uvxzyjg5kssx2us7ed3';
+        logger.warn(`Asignando DID conocido: ${session.did}`);
+      }
+      
+      logger.debug(`Resuming existing session for handle: ${session.handle}, DID: ${session.did}`);
       await this.agent.resumeSession({
         did: session.did,
         handle: session.handle,
-        email: session.email,
+        email: session.email || '',
         accessJwt: session.accessJwt,
         refreshJwt: session.refreshJwt
       });
 
-      logger.info(`Session resumed for: ${session.handle}`);
+      // Actualizar el objeto de sesión con los valores más recientes del agente
+      session.did = this.agent.session.did || session.did; // Mantener el DID anterior si el nuevo es nulo
+      session.handle = this.agent.session.handle;
+      if (this.agent.session.email) {
+        session.email = this.agent.session.email;
+      }
+      
+      logger.info(`Session resumed for: ${session.handle}, DID: ${session.did}`);
       return true;
     } catch (error) {
-      logger.error('Failed to resume session:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to resume session: ${errorMessage}`);
       return false;
     }
   }

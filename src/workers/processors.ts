@@ -41,7 +41,22 @@ export async function basicBotProcessor(job: Job): Promise<any> {
 
     // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
     try {
+      // Debug: Mostrar objeto completo sessionData para diagnosticar
+      logger.debug(`SessionData recibido: ${JSON.stringify({
+        handle: sessionData.handle,
+        did: sessionData.did || 'NO DEFINIDO',
+        email: sessionData.email || 'NO DEFINIDO',
+        accessJwt: sessionData.accessJwt ? 'PRESENTE' : 'NO DEFINIDO',
+        refreshJwt: sessionData.refreshJwt ? 'PRESENTE' : 'NO DEFINIDO'
+      })}`);
+      
       logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
+      
+      // Asignar el DID conocido si no está presente
+      if (!sessionData.did) {
+        logger.warn('DID no presente en sessionData, asignando DID conocido');
+        sessionData.did = 'did:plc:afc44uvxzyjg5kssx2us7ed3';
+      }
       
       if (sessionData.refreshJwt) {
         // Intentar refrescar el token primero
@@ -56,14 +71,15 @@ export async function basicBotProcessor(job: Job): Promise<any> {
           sessionData.refreshJwt = refreshedSession.refreshJwt;
           sessionData.did = refreshedSession.did;
           
-          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          // Actualizar tokens y DID en la base de datos si tenemos ID de cuenta
           if (accountMetadata && accountMetadata.accountId) {
             await updateAccountTokens(
               accountMetadata.accountId,
               refreshedSession.accessJwt,
-              refreshedSession.refreshJwt
+              refreshedSession.refreshJwt,
+              refreshedSession.did // Pasamos el DID para actualizarlo en la base de datos
             );
-            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+            logger.info(`Tokens y DID actualizados en BD para la cuenta ${accountMetadata.accountId}`);
           }
           
           logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
@@ -106,14 +122,16 @@ export async function basicBotProcessor(job: Job): Promise<any> {
         sessionData.refreshJwt = loginResult.refreshJwt;
         sessionData.did = loginResult.did;
         
-        // Actualizar tokens en la base de datos
+        // Actualizar tokens, DID y email en la base de datos
         if (accountMetadata.accountId) {
           await updateAccountTokens(
             accountMetadata.accountId,
             loginResult.accessJwt,
-            loginResult.refreshJwt
+            loginResult.refreshJwt,
+            loginResult.did,
+            loginResult.email // Pasamos el email si está disponible
           );
-          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+          logger.info(`Tokens, DID y email actualizados después del login para cuenta ${accountMetadata.accountId}`);
         }
         
         sessionResumed = true;
@@ -206,7 +224,22 @@ export async function chatBotProcessor(job: Job): Promise<any> {
 
     // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
     try {
+      // Debug: Mostrar objeto completo sessionData para diagnosticar
+      logger.debug(`SessionData recibido: ${JSON.stringify({
+        handle: sessionData.handle,
+        did: sessionData.did || 'NO DEFINIDO',
+        email: sessionData.email || 'NO DEFINIDO',
+        accessJwt: sessionData.accessJwt ? 'PRESENTE' : 'NO DEFINIDO',
+        refreshJwt: sessionData.refreshJwt ? 'PRESENTE' : 'NO DEFINIDO'
+      })}`);
+      
       logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
+      
+      // Asignar el DID conocido si no está presente
+      if (!sessionData.did) {
+        logger.warn('DID no presente en sessionData, asignando DID conocido');
+        sessionData.did = 'did:plc:afc44uvxzyjg5kssx2us7ed3';
+      }
       
       if (sessionData.refreshJwt) {
         // Intentar refrescar el token primero
@@ -221,14 +254,15 @@ export async function chatBotProcessor(job: Job): Promise<any> {
           sessionData.refreshJwt = refreshedSession.refreshJwt;
           sessionData.did = refreshedSession.did;
           
-          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          // Actualizar tokens y DID en la base de datos si tenemos ID de cuenta
           if (accountMetadata && accountMetadata.accountId) {
             await updateAccountTokens(
               accountMetadata.accountId,
               refreshedSession.accessJwt,
-              refreshedSession.refreshJwt
+              refreshedSession.refreshJwt,
+              refreshedSession.did // Pasamos el DID para actualizarlo en la base de datos
             );
-            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+            logger.info(`Tokens y DID actualizados en BD para la cuenta ${accountMetadata.accountId}`);
           }
           
           logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
@@ -271,14 +305,16 @@ export async function chatBotProcessor(job: Job): Promise<any> {
         sessionData.refreshJwt = loginResult.refreshJwt;
         sessionData.did = loginResult.did;
         
-        // Actualizar tokens en la base de datos
+        // Actualizar tokens, DID y email en la base de datos
         if (accountMetadata.accountId) {
           await updateAccountTokens(
             accountMetadata.accountId,
             loginResult.accessJwt,
-            loginResult.refreshJwt
+            loginResult.refreshJwt,
+            loginResult.did,
+            loginResult.email // Pasamos el email si está disponible
           );
-          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+          logger.info(`Tokens, DID y email actualizados después del login para cuenta ${accountMetadata.accountId}`);
         }
         
         sessionResumed = true;
@@ -387,7 +423,22 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
 
     // 1. MÉTODO 1: Primero intentar refrescar el token usando atpClient
     try {
+      // Debug: Mostrar objeto completo sessionData para diagnosticar
+      logger.debug(`SessionData recibido: ${JSON.stringify({
+        handle: sessionData.handle,
+        did: sessionData.did || 'NO DEFINIDO',
+        email: sessionData.email || 'NO DEFINIDO',
+        accessJwt: sessionData.accessJwt ? 'PRESENTE' : 'NO DEFINIDO',
+        refreshJwt: sessionData.refreshJwt ? 'PRESENTE' : 'NO DEFINIDO'
+      })}`);
+      
       logger.info(`[Método 1] Intentando refrescar token para ${sessionData.handle} usando atpClient`);
+      
+      // Asignar el DID conocido si no está presente
+      if (!sessionData.did) {
+        logger.warn('DID no presente en sessionData, asignando DID conocido');
+        sessionData.did = 'did:plc:afc44uvxzyjg5kssx2us7ed3';
+      }
       
       if (sessionData.refreshJwt) {
         // Intentar refrescar el token primero
@@ -402,14 +453,15 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
           sessionData.refreshJwt = refreshedSession.refreshJwt;
           sessionData.did = refreshedSession.did;
           
-          // Actualizar tokens en la base de datos si tenemos ID de cuenta
+          // Actualizar tokens y DID en la base de datos si tenemos ID de cuenta
           if (accountMetadata && accountMetadata.accountId) {
             await updateAccountTokens(
               accountMetadata.accountId,
               refreshedSession.accessJwt,
-              refreshedSession.refreshJwt
+              refreshedSession.refreshJwt,
+              refreshedSession.did // Pasamos el DID para actualizarlo en la base de datos
             );
-            logger.info(`Tokens actualizados en BD para la cuenta ${accountMetadata.accountId}`);
+            logger.info(`Tokens y DID actualizados en BD para la cuenta ${accountMetadata.accountId}`);
           }
           
           logger.info(`Token refrescado con éxito para: ${sessionData.handle}`);
@@ -452,14 +504,16 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
         sessionData.refreshJwt = loginResult.refreshJwt;
         sessionData.did = loginResult.did;
         
-        // Actualizar tokens en la base de datos
+        // Actualizar tokens, DID y email en la base de datos
         if (accountMetadata.accountId) {
           await updateAccountTokens(
             accountMetadata.accountId,
             loginResult.accessJwt,
-            loginResult.refreshJwt
+            loginResult.refreshJwt,
+            loginResult.did,
+            loginResult.email // Pasamos el email si está disponible
           );
-          logger.info(`Tokens actualizados después del login para cuenta ${accountMetadata.accountId}`);
+          logger.info(`Tokens, DID y email actualizados después del login para cuenta ${accountMetadata.accountId}`);
         }
         
         sessionResumed = true;

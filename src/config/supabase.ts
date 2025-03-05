@@ -13,13 +13,15 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
  */
 export interface AccountData {
   id: number;
-  username: string;
+  username: string; // Este es el handle de la cuenta en Bluesky
   password: string;
   jwt: string | null; // accessJwt
   refresh_jwt: string | null; // refreshJwt
   proxy: string | null;
   user_agent: string | null;
   endpoint: string | null;
+  did: string | null; // DID de la cuenta
+  email: string | null; // Email de la cuenta
 }
 
 /**
@@ -33,7 +35,7 @@ export async function getAccountsByCategory(categoryId: number): Promise<Account
     
     const { data, error } = await supabase
       .from('accounts_imported')
-      .select('id, username, password, jwt, refresh_jwt, proxy, user_agent, endpoint')
+      .select('id, username, password, jwt, refresh_jwt, proxy, user_agent, endpoint, did, email')
       .eq('category_id', categoryId)
       .eq('status', 'alive');
     
@@ -51,26 +53,41 @@ export async function getAccountsByCategory(categoryId: number): Promise<Account
 }
 
 /**
- * Actualiza los tokens JWT de una cuenta
+ * Actualiza los tokens JWT de una cuenta y opcionalmente el DID y email
  * @param accountId ID de la cuenta
  * @param accessJwt Nuevo token de acceso
  * @param refreshJwt Nuevo token de refresco
+ * @param did DID de la cuenta (opcional)
+ * @param email Email de la cuenta (opcional)
  */
 export async function updateAccountTokens(
   accountId: number,
   accessJwt: string,
-  refreshJwt: string
+  refreshJwt: string,
+  did?: string,
+  email?: string
 ): Promise<void> {
   try {
     logger.info(`Updating tokens for account ID: ${accountId}`);
     
+    const updateData: any = {
+      jwt: accessJwt,
+      refresh_jwt: refreshJwt,
+      updated_at: new Date().toISOString()
+    };
+    
+    // Solo agregar DID y email si se proporcionan
+    if (did !== undefined) {
+      updateData.did = did;
+    }
+    
+    if (email !== undefined) {
+      updateData.email = email;
+    }
+    
     const { error } = await supabase
       .from('accounts_imported')
-      .update({
-        jwt: accessJwt,
-        refresh_jwt: refreshJwt,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', accountId);
     
     if (error) {
@@ -85,8 +102,36 @@ export async function updateAccountTokens(
   }
 }
 
+/**
+ * Obtiene una cuenta específica por su ID
+ * @param accountId ID de la cuenta
+ * @returns Datos de la cuenta o null si no existe
+ */
+export async function getAccountById(accountId: number): Promise<AccountData | null> {
+  try {
+    logger.info(`Getting account with ID: ${accountId}`);
+    
+    const { data, error } = await supabase
+      .from('accounts_imported')
+      .select('id, username, password, jwt, refresh_jwt, proxy, user_agent, endpoint, did, email')
+      .eq('id', accountId)
+      .single();
+    
+    if (error) {
+      logger.error('Error fetching account:', error);
+      throw new Error(`Failed to fetch account: ${error.message}`);
+    }
+    
+    return data;
+  } catch (error) {
+    logger.error('Exception in getAccountById:', error);
+    throw error;
+  }
+}
+
 export default {
   supabase,
   getAccountsByCategory,
-  updateAccountTokens
+  updateAccountTokens,
+  getAccountById
 };
