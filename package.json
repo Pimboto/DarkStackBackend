@@ -22,6 +22,7 @@
     "@bull-board/api": "^6.7.10",
     "@bull-board/express": "^6.7.10",
     "@skyware/bot": "^0.3.8",
+    "@supabase/supabase-js": "^2.49.1",
     "bullmq": "^5.41.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

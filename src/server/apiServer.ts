@@ -3,12 +3,18 @@ import express, { Request, Response, NextFunction } from "express";
 import http from "http";
 import cors from "cors";
 import helmet from "helmet";
-import { initializeSocketService, emitJobEvent, closeSocketService } from "../services/socketService.ts";
+import {
+  initializeSocketService,
+  emitJobEvent,
+  closeSocketService,
+} from "../services/socketService.ts";
 // Corregir importaciones de Bull Board
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter.js";
 import { ExpressAdapter } from "@bull-board/express";
 import { rateLimit } from "express-rate-limit";
+import { v4 as uuidv4 } from "uuid";
+import { getAccountsByCategory } from "../config/supabase.ts";
 
 import {
   addJob,
@@ -140,30 +146,90 @@ apiRouter.post(
 apiRouter.post(
   "/jobs/engagement",
   customAsyncHandler(async (req, res) => {
-    const { sessionData, engagementOptions, strategyType, parentId, priority } =
-      req.body;
+    const {
+      categoryId,
+      engagementOptions,
+      strategyType,
+      parentId: requestParentId,
+      priority,
+    } = req.body;
 
-    if (!sessionData) {
-      return res.status(400).json({ error: "Session data is required" });
+    if (!categoryId) {
+      return res.status(400).json({ error: "Category ID is required" });
     }
 
-    const jobId = await addJob(
-      "engagementBot",
-      req.userId,
-      {
-        sessionData,
-        engagementOptions,
-        strategyType: strategyType || "human-like",
-      },
-      { parentId, priority }
-    );
+    try {
+      // Obtener cuentas de la categoría desde Supabase
+      const accounts = await getAccountsByCategory(Number(categoryId));
 
-    return res
-      .status(201)
-      .json({ jobId, message: "Engagement job added successfully" });
+      if (accounts.length === 0) {
+        return res.status(404).json({
+          error: `No accounts found in category ${categoryId}`,
+        });
+      }
+
+      // Usar el parentId proporcionado o generar uno nuevo
+      const parentId = requestParentId || uuidv4();
+      logger.info(
+        `Creating engagement jobs for category ${categoryId} with parentId ${parentId}`
+      );
+
+      // Crear un job para cada cuenta encontrada en la categoría
+      const jobPromises = accounts.map((account) => {
+        // Crear objeto de sesión a partir de los datos de la cuenta
+        const sessionData = {
+          did: "", // Se llenará durante el procesamiento de la sesión
+          handle: account.username,
+          email: "",
+          accessJwt: account.jwt,
+          refreshJwt: account.refresh_jwt,
+        };
+
+        // Metadata adicional para el procesamiento
+        const accountMetadata = {
+          accountId: account.id,
+          proxy: account.proxy,
+          userAgent: account.user_agent,
+          endpoint: account.endpoint || "https://bsky.social",
+          password: account.password,
+        };
+
+        logger.debug(
+          `Creating job for account: ${account.username} (ID: ${account.id})`
+        );
+
+        // Añadir job a la cola
+        return addJob(
+          "engagementBot",
+          req.userId,
+          {
+            sessionData,
+            engagementOptions,
+            strategyType: strategyType || "human-like",
+            accountMetadata, // Información adicional para el procesador
+          },
+          { parentId, priority }
+        );
+      });
+
+      // Esperar a que todos los jobs sean creados
+      const jobIds = await Promise.all(jobPromises);
+
+      return res.status(201).json({
+        message: `Added ${jobIds.length} engagement jobs for category ${categoryId}`,
+        parentId,
+        jobIds,
+        accountCount: accounts.length,
+      });
+    } catch (error) {
+      logger.error("Error creating engagement jobs:", error);
+      return res.status(500).json({
+        error: "Failed to create engagement jobs",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   })
 );
-
 // Añadir múltiples jobs
 apiRouter.post(
   "/jobs/bulk/:jobType",
@@ -213,11 +279,11 @@ apiRouter.get(
 
     // Obtener logs de manera efectiva
     const logs = job.data?.logs || [];
-    
+
     // Obtener logs de salida capturada en caso de que existan (captureOutput: true)
     const outputLogs = await job.getChildrenValues();
     let combinedLogs = [...logs];
-    
+
     // Procesar logs de salida capturada si existen
     if (outputLogs && outputLogs.length > 0) {
       // Los logs capturados desde console.log, etc.
@@ -227,12 +293,12 @@ apiRouter.get(
           timestamp: new Date().toISOString(),
           level: "info",
           message: output.trim(),
-          source: "captured"
+          source: "captured",
         }));
-      
+
       combinedLogs = [...combinedLogs, ...capturedOutputLogs];
     }
-    
+
     // Ordenar logs por timestamp
     combinedLogs.sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime();
@@ -257,7 +323,7 @@ apiRouter.get(
           : null,
       },
       returnvalue: job.returnvalue,
-      logs: combinedLogs // Devuelve los logs mejorados
+      logs: combinedLogs, // Devuelve los logs mejorados
     });
   })
 );
@@ -279,7 +345,7 @@ apiRouter.get(
 
     // Obtener logs de manera efectiva
     const logs = job.data?.logs || [];
-    
+
     // Obtener logs de salida capturada
     const outputLogs = await job.getChildrenValues();
     let combinedLogs = [...logs];
@@ -291,12 +357,12 @@ apiRouter.get(
           timestamp: new Date().toISOString(),
           level: "info",
           message: output.trim(),
-          source: "captured"
+          source: "captured",
         }));
-      
+
       combinedLogs = [...combinedLogs, ...capturedOutputLogs];
     }
-    
+
     // Ordenar logs por timestamp
     combinedLogs.sort((a: { timestamp: string }, b: { timestamp: string }) => {
       const timeA = new Date(a.timestamp).getTime();
@@ -307,7 +373,7 @@ apiRouter.get(
     return res.json({
       jobId,
       count: combinedLogs.length,
-      logs: combinedLogs
+      logs: combinedLogs,
     });
   })
 );
@@ -406,26 +472,28 @@ let httpServer: http.Server | null = null;
 export async function startServer(port = 3000): Promise<http.Server> {
   // Crear el servidor HTTP
   httpServer = http.createServer(app);
-  
+
   // Inicializar el servicio de WebSockets
   const io = initializeSocketService(httpServer);
-  
+
   // Configurar el manejo de eventos para los sockets
   io.on("connection", (socket) => {
     const userId = socket.data.userId;
-    
+
     // Inicialización de workers por usuario
     socket.on("init-workers", (data: { concurrency?: number }) => {
       const concurrency = data.concurrency ?? 5;
-      logger.info(`Inicializando workers para usuario ${userId}, concurrencia ${concurrency}`);
-      
+      logger.info(
+        `Inicializando workers para usuario ${userId}, concurrencia ${concurrency}`
+      );
+
       // Crear workers para el usuario
       createBotWorkers(userId, concurrency);
-      
+
       // Crear adaptadores BullMQ para visualización en Bull Board
       const jobTypes: JobType[] = ["basicBot", "chatBot", "engagementBot"];
       jobTypes.forEach((jt) => createQueueAdapter(jt, userId));
-      
+
       // Confirmar inicialización
       socket.emit("workers-initialized", {
         status: "success",
@@ -433,20 +501,25 @@ export async function startServer(port = 3000): Promise<http.Server> {
       });
     });
   });
-  
+
   // Registrar listeners para todos los eventos de colas
   const jobEvents = [
-    'job:added', 'job:started', 'job:progress', 'job:completed',
-    'job:failed', 'job:error', 'job:log'
+    "job:added",
+    "job:started",
+    "job:progress",
+    "job:completed",
+    "job:failed",
+    "job:error",
+    "job:log",
   ];
-  
+
   // Configurar la emisión de eventos WebSocket para cada evento de job
-  jobEvents.forEach(eventName => {
+  jobEvents.forEach((eventName) => {
     queueEmitter.on(eventName, (jobInfo) => {
       emitJobEvent(eventName, jobInfo);
     });
   });
-  
+
   // Iniciar el servidor HTTP
   return new Promise((resolve) => {
     httpServer!.listen(port, () => {
@@ -462,7 +535,7 @@ export async function startServer(port = 3000): Promise<http.Server> {
 export async function stopServer(): Promise<void> {
   // Cerrar el servicio de WebSockets
   closeSocketService();
-  
+
   // Cerrar el servidor HTTP
   if (httpServer) {
     return new Promise((resolve, reject) => {
