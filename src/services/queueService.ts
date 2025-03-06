@@ -8,9 +8,8 @@ import { emitJobEvent } from './socketService.ts';
 
 // Importar processors directamente para evitar dependencias circulares
 import {
-  basicBotProcessor,
-  chatBotProcessor,
-  engagementBotProcessor
+  engagementBotProcessor,
+  massPostProcessor
 } from '../workers/processors.ts'
 
 // Extender la interfaz WorkerOptions para incluir captureOutput
@@ -30,7 +29,7 @@ export interface JobLog {
 /**
  * Tipos de trabajo
  */
-export type JobType = 'basicBot' | 'chatBot' | 'engagementBot';
+export type JobType = 'massPostBot' | 'engagementBot';
 
 /**
  * Emisor global de eventos
@@ -48,8 +47,7 @@ const queueEventsMap = new Map<string, QueueEvents>();
  * Mapa procesadores por tipo de trabajo
  */
 const processorMap: Record<JobType, (job: Job) => Promise<any>> = {
-  'basicBot': basicBotProcessor,
-  'chatBot': chatBotProcessor,
+  'massPostBot': massPostProcessor,
   'engagementBot': engagementBotProcessor
 };
 
@@ -78,7 +76,7 @@ function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
     // Emitir evento a través de WebSockets
     emitJobEvent('job:completed', {
       ...eventData,
-      userId: queueName.split('-').pop() || '',
+      userId: queueName.split('-').pop() ?? '',
     });
     
     logger.debug(`[${queueName}] Job ${jobId} completed`);
@@ -93,7 +91,7 @@ function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
     // Emitir evento a través de WebSockets
     emitJobEvent('job:failed', {
       ...eventData,
-      userId: queueName.split('-').pop() || '',
+      userId: queueName.split('-').pop() ?? '',
     });
     
     logger.error(`[${queueName}] Job ${jobId} failed: ${failedReason}`);
@@ -109,7 +107,7 @@ function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
     // Emitir evento a través de WebSockets
     emitJobEvent('job:progress', {
       ...eventData,
-      userId: queueName.split('-').pop() || '',
+      userId: queueName.split('-').pop() ?? '',
     });
     
     logger.debug(`[${queueName}] Job ${jobId} progress: ${progress}`);
@@ -120,7 +118,7 @@ function setupQueueEvents(queueEvents: QueueEvents, queueName: string): void {
  * Configura eventos Worker
  */
 function setupWorkerEvents(worker: Worker, queueName: string): void {
-  const userId = queueName.split('-').pop() || '';
+  const userId = queueName.split('-').pop() ?? '';
   
   worker.on('error', (err) => {
     logger.error(`[${queueName}] Worker error:`, err);

@@ -89,56 +89,97 @@ apiRouter.get("/status", (req, res) => {
   });
 });
 
-// Añadir job basicBot
+// Añadir job massPostBot
+
 apiRouter.post(
-  "/jobs/basic",
+  "/jobs/masspost",
   customAsyncHandler(async (req, res) => {
-    const { message, sessionData, parentId, priority } = req.body;
-    if (!sessionData) {
-      return res.status(400).json({ error: "Session data is required" });
+    const {
+      categoryId,
+      postOptions,
+      parentId: requestParentId,
+      priority,
+    } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json({ error: "Category ID is required" });
     }
 
-    const jobId = await addJob(
-      "basicBot",
-      req.userId,
-      { message, sessionData },
-      { parentId, priority }
-    );
-
-    return res.status(201).json({ jobId, message: "Job added successfully" });
-  })
-);
-
-// Añadir job chatBot
-apiRouter.post(
-  "/jobs/chat",
-  customAsyncHandler(async (req, res) => {
-    const { messages, recipients, sessionData, parentId, priority } = req.body;
-
-    if (!sessionData) {
-      return res.status(400).json({ error: "Session data is required" });
-    }
-    if (!messages || (Array.isArray(messages) && messages.length === 0)) {
+    if (!postOptions || !postOptions.posts || postOptions.posts.length === 0) {
       return res
         .status(400)
-        .json({ error: "At least one message is required" });
-    }
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-      return res
-        .status(400)
-        .json({ error: "At least one recipient is required" });
+        .json({ error: "Post options with at least one post are required" });
     }
 
-    const jobId = await addJob(
-      "chatBot",
-      req.userId,
-      { messages, recipients, sessionData },
-      { parentId, priority }
-    );
+    try {
+      // Obtener cuentas de la categoría desde Supabase
+      const accounts = await getAccountsByCategory(Number(categoryId));
 
-    return res
-      .status(201)
-      .json({ jobId, message: "Chat job added successfully" });
+      if (accounts.length === 0) {
+        return res.status(404).json({
+          error: `No accounts found in category ${categoryId}`,
+        });
+      }
+
+      // Usar el parentId proporcionado o generar uno nuevo
+      const parentId = requestParentId || uuidv4();
+      logger.info(
+        `Creating mass post jobs for category ${categoryId} with parentId ${parentId}`
+      );
+
+      // Crear un job para cada cuenta encontrada en la categoría
+      const jobPromises = accounts.map((account) => {
+        // Crear objeto de sesión a partir de los datos de la cuenta
+        const sessionData = {
+          did: account.did ?? "", // Se llenará durante el procesamiento de la sesión
+          handle: account.username,
+          email: account.email ?? "",
+          accessJwt: account.jwt,
+          refreshJwt: account.refresh_jwt,
+        };
+
+        // Metadata adicional para el procesamiento
+        const accountMetadata = {
+          accountId: account.id,
+          proxy: account.proxy,
+          userAgent: account.user_agent,
+          endpoint: account.endpoint ?? "https://bsky.social",
+          password: account.password,
+        };
+
+        logger.debug(
+          `Creating mass post job for account: ${account.username} (ID: ${account.id})`
+        );
+
+        // Añadir job a la cola
+        return addJob(
+          "massPostBot",
+          req.userId,
+          {
+            sessionData,
+            postOptions,
+            accountMetadata,
+          },
+          { parentId, priority }
+        );
+      });
+
+      // Esperar a que todos los jobs sean creados
+      const jobIds = await Promise.all(jobPromises);
+
+      return res.status(201).json({
+        message: `Added ${jobIds.length} mass post jobs for category ${categoryId}`,
+        parentId,
+        jobIds,
+        accountCount: accounts.length,
+      });
+    } catch (error) {
+      logger.error("Error creating mass post jobs:", error);
+      return res.status(500).json({
+        error: "Failed to create mass post jobs",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   })
 );
 
@@ -491,7 +532,7 @@ export async function startServer(port = 3000): Promise<http.Server> {
       createBotWorkers(userId, concurrency);
 
       // Crear adaptadores BullMQ para visualización en Bull Board
-      const jobTypes: JobType[] = ["basicBot", "chatBot", "engagementBot"];
+      const jobTypes: JobType[] = ["massPostBot", "engagementBot"];
       jobTypes.forEach((jt) => createQueueAdapter(jt, userId));
 
       // Confirmar inicialización

@@ -7,7 +7,7 @@ import logger from '../utils/logger.ts';
  */
 export function createBotWorkers(userId: string, concurrency = 5): void {
   logger.info(`Creating bot workers for user ${userId}, concurrency=${concurrency}`);
-  const botTypes: JobType[] = ['basicBot', 'chatBot', 'engagementBot'];
+  const botTypes: JobType[] = ['massPostBot', 'engagementBot'];
 
   for (const bt of botTypes) {
     // Usar createWorker de queueService que ya tiene lógica de selección de procesador
