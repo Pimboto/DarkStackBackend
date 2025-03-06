@@ -229,7 +229,7 @@ export function getQueue(jobType: JobType, userId: string): Queue {
 }
 
 /**
- * Helper para añadir un log al job
+ * Helper para añadir un log al job usando el método nativo job.log() de BullMQ
  */
 async function addJobLog(job: Job, level: 'info' | 'error' | 'debug' | 'warn', message: string): Promise<void> {
   if (!job || !job.id) return;
@@ -241,17 +241,11 @@ async function addJobLog(job: Job, level: 'info' | 'error' | 'debug' | 'warn', m
     message,
   };
 
-  // Inicializar array de logs si no existe
-  const logs = job.data.logs || [];
-  logs.push(logEntry);
+  // Usar el método nativo job.log() de BullMQ
+  // Formato JSON para preservar la estructura y nivel del log
+  await job.log(JSON.stringify(logEntry));
 
-  // Actualizar el job con el nuevo log
-  await job.updateData({
-    ...job.data,
-    logs,
-  });
-
-  // Preparar datos del evento
+  // Preparar datos del evento - mantener la misma estructura para compatibilidad
   const eventData = {
     jobId: job.id,
     userId: job.data.userId,
@@ -322,15 +316,7 @@ export function createWorker(
     queueName,
     async (job: Job<any, any, any>) => {
       try {
-        // Inicializar array de logs en job.data si no existe
-        if (!job.data.logs) {
-          await job.updateData({
-            ...job.data,
-            logs: [],
-          });
-        }
-
-        // Añadir log de inicio
+        // Añadir log de inicio usando el método nativo de BullMQ
         await addJobLog(job, 'info', `Starting ${jobType} job ${job.id}`);
 
         queueEmitter.emit('job:started', {
@@ -564,6 +550,41 @@ export async function getJob(
 }
 
 /**
+ * Obtener logs de un job específico usando el método nativo de BullMQ
+ */
+export async function getJobLogs(
+  jobType: JobType,
+  userId: string,
+  jobId: string
+): Promise<JobLog[]> {
+  const job = await getJob(jobType, userId, jobId);
+  if (!job) {
+    return [];
+  }
+  
+  // Obtener logs nativos de BullMQ
+  // Nota: getLogs() es un método real de BullMQ pero TypeScript no lo reconoce en sus definiciones
+  const logs = await (job as any).getLogs() as string[];
+  
+  // Convertir los logs de string a objetos JobLog
+  return logs
+    .filter((log: string) => log) // Filtrar logs vacíos
+    .map((logString: string) => {
+      try {
+        // Intentar parsear el log como JSON
+        return JSON.parse(logString) as JobLog;
+      } catch (e) {
+        // Si no se puede parsear, crear un log genérico
+        return {
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          message: logString,
+        } as JobLog;
+      }
+    });
+}
+
+/**
  * Obtener jobs por parentId
  */
 export async function getJobsByParentId(
@@ -619,6 +640,7 @@ export default {
   addJob,
   addBulkJobs,
   getJob,
+  getJobLogs,
   getJobsByParentId,
   closeAllQueues,
 };

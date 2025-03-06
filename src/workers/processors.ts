@@ -548,7 +548,7 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
     await job.updateProgress(40);
     logger.info('Simulating engagement actions...');
     
-    // Crear un logger personalizado que envíe los logs al job
+    // Crear un logger personalizado que envíe los logs al job directamente usando job.log()
     // Helper para formatear mensajes de log
     function formatLogMessage(message: string, args: any[]): string {
       if (args.length === 0) return message;
@@ -563,22 +563,45 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
       }
     }
     
+    // Crear funciones de logger que usen job.log() directamente
     const jobLogger: LoggerFunctions = {
       info: (message: string, ...args: any[]) => {
         const formattedMsg = formatLogMessage(message, args);
-        console.log(formattedMsg); // Esto será capturado y añadido al job
+        // Usar job.log() directamente con formato JSON - este es el método nativo de BullMQ
+        job.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          message: formattedMsg
+        })).catch(err => logger.error(`Error logging to job: ${err}`));
+        // También lo mandamos al logger normal
+        logger.info(formattedMsg);
       },
       debug: (message: string, ...args: any[]) => {
         const formattedMsg = formatLogMessage(message, args);
-        console.debug(formattedMsg); // Esto será capturado y añadido al job
+        job.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'debug',
+          message: formattedMsg
+        })).catch(err => logger.error(`Error logging to job: ${err}`));
+        logger.debug(formattedMsg);
       },
       warn: (message: string, ...args: any[]) => {
         const formattedMsg = formatLogMessage(message, args);
-        console.warn(formattedMsg); // Esto será capturado y añadido al job
+        job.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'warn',
+          message: formattedMsg
+        })).catch(err => logger.error(`Error logging to job: ${err}`));
+        logger.warn(formattedMsg);
       },
       error: (message: string, ...args: any[]) => {
         const formattedMsg = formatLogMessage(message, args);
-        console.error(formattedMsg); // Esto será capturado y añadido al job
+        job.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          message: formattedMsg
+        })).catch(err => logger.error(`Error logging to job: ${err}`));
+        logger.error(formattedMsg);
       }
     };
     
@@ -613,8 +636,12 @@ export async function engagementBotProcessor(job: Job): Promise<any> {
         stopOnError: false,
         dryRun: false,
         progressCallback: async (action: PlannedAction, index: number) => {
-          // Aquí usamos console.log para que se capture con captureOutput: true
-          console.log(`Executing ${action.type} action #${index+1}`);
+          // Usar job.log() directamente en lugar de console.log
+          await job.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'info',
+            message: `Executing ${action.type} action #${index+1}`
+          }));
           await reportActionProgress();
         }
       }
