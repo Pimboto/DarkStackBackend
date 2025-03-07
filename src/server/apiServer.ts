@@ -3,6 +3,8 @@ import express, { Request, Response, NextFunction } from "express";
 import http from "http";
 import cors from "cors";
 import helmet from "helmet";
+import swaggerUi from "swagger-ui-express";
+import { specs } from "../config/swagger.ts";
 import {
   initializeSocketService,
   emitJobEvent,
@@ -80,7 +82,32 @@ app.use(userIdMiddleware);
 // Router principal
 const apiRouter = express.Router();
 
-// GET /api/status
+/**
+ * @swagger
+ * /api/status:
+ *   get:
+ *     summary: Get API status
+ *     description: Returns the current status of the API and user information
+ *     tags: [Status]
+ *     security:
+ *       - userId: []
+ *     responses:
+ *       200:
+ *         description: API status information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 userId:
+ *                   type: string
+ */
 apiRouter.get("/status", (req, res) => {
   res.json({
     status: "ok",
@@ -89,8 +116,80 @@ apiRouter.get("/status", (req, res) => {
   });
 });
 
-// Añadir job massPostBot
-
+/**
+ * @swagger
+ * /api/jobs/masspost:
+ *   post:
+ *     summary: Create mass post jobs
+ *     description: Creates multiple post jobs for accounts in a specified category
+ *     tags: [Jobs]
+ *     security:
+ *       - userId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - categoryId
+ *               - postOptions
+ *             properties:
+ *               categoryId:
+ *                 type: number
+ *                 description: ID of the account category
+ *               postOptions:
+ *                 type: object
+ *                 required:
+ *                   - posts
+ *                 properties:
+ *                   posts:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *               parentId:
+ *                 type: string
+ *                 description: Optional parent job ID
+ *               priority:
+ *                 type: number
+ *                 description: Job priority
+ *     responses:
+ *       201:
+ *         description: Jobs created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 parentId:
+ *                   type: string
+ *                 jobIds:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 accountCount:
+ *                   type: number
+ *       400:
+ *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: No accounts found in category
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 apiRouter.post(
   "/jobs/masspost",
   customAsyncHandler(async (req, res) => {
@@ -183,7 +282,77 @@ apiRouter.post(
   })
 );
 
-// Añadir job engagementBot
+/**
+ * @swagger
+ * /api/jobs/engagement:
+ *   post:
+ *     summary: Create engagement jobs
+ *     description: Creates multiple engagement jobs for accounts in a specified category
+ *     tags: [Jobs]
+ *     security:
+ *       - userId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - categoryId
+ *             properties:
+ *               categoryId:
+ *                 type: number
+ *                 description: ID of the account category
+ *               engagementOptions:
+ *                 type: object
+ *                 description: Options for engagement behavior
+ *               strategyType:
+ *                 type: string
+ *                 description: Type of engagement strategy to use
+ *                 default: human-like
+ *               parentId:
+ *                 type: string
+ *                 description: Optional parent job ID
+ *               priority:
+ *                 type: number
+ *                 description: Job priority
+ *     responses:
+ *       201:
+ *         description: Jobs created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 parentId:
+ *                   type: string
+ *                 jobIds:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 accountCount:
+ *                   type: number
+ *       400:
+ *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: No accounts found in category
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 apiRouter.post(
   "/jobs/engagement",
   customAsyncHandler(async (req, res) => {
@@ -464,6 +633,10 @@ apiRouter.get(
 
 // Montar /api
 app.use("/api", apiRouter);
+
+// Swagger UI para documentación de API
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
+logger.info("Swagger UI disponible en /api-docs");
 
 /**
  * Bull Board

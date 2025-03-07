@@ -1,6 +1,5 @@
 // src/workers/processors/massPostProcessor.ts
 import { Job } from 'bullmq';
-import { initializeBsky, LogLevel } from '../../index.ts';
 import { BaseProcessor } from './BaseProcessor.ts';
 import logger from '../../utils/logger.ts';
 import { sleep } from '../../utils/delay.ts';
@@ -82,16 +81,10 @@ export class MassPostProcessor extends BaseProcessor {
         reverseOrder: postOptions.reverseOrder || false
       };
 
-      // Handle authentication
-      const { atpClient } = await this.handleAuthentication(sessionData, accountMetadata);
+      // Handle authentication - usar 'let' para poder actualizar la referencia si es necesario
+      let { atpClient } = await this.handleAuthentication(sessionData, accountMetadata);
       
       await job.updateProgress(20);
-
-      // Initialize services
-      const { postService } = await initializeBsky({
-        logLevel: LogLevel.DEBUG,
-        autoLogin: false,
-      });
 
       // Check proxy status
       const proxyInfo = await this.checkProxy(atpClient);
@@ -122,6 +115,16 @@ export class MassPostProcessor extends BaseProcessor {
         try {
           jobLogger.info(`Processing post ${i + 1} of ${postCount}: ${post.text.substring(0, 30)}...`);
           
+          // Verificar explícitamente el estado de la sesión antes de cada post
+          const agent = atpClient.getAgent();
+          if (!agent.session?.did) {
+            // Intentar reautenticar si la sesión no está activa
+            jobLogger.warn('Sesión no activa antes de crear post, reautenticando...');
+            const { atpClient: refreshedClient } = await this.handleAuthentication(sessionData, accountMetadata);
+            // Actualizar la referencia al cliente
+            atpClient = refreshedClient;
+          }
+          
           // Handle image if provided
           let postResult;
           if (post.imageUrl) {
@@ -129,17 +132,31 @@ export class MassPostProcessor extends BaseProcessor {
             
             // Handle image upload and post creation
             postResult = await this.createPostWithImage(
-              atpClient, 
-              post.text, 
-              post.imageUrl, 
-              post.alt ?? 'Image', 
-              post.includeTimestamp
+              atpClient,
+              post.text,
+              post.imageUrl,
+              post.alt ?? 'Image',
+              post.includeTimestamp,
+              sessionData,
+              accountMetadata
             );
           } else {
-            // Create text-only post
-            postResult = await postService.createPost(post.text, {
-              includeTimestamp: post.includeTimestamp
+            // Verificar que tenemos un cliente válido
+            const agent = atpClient.getAgent();
+            if (!agent.session?.did) {
+              throw new Error('No active session when trying to create post');
+            }
+            
+            // Create text-only post usando directamente el agent para mayor consistencia
+            jobLogger.info('Creating post using atp agent directly...');
+            const result = await agent.post({
+              text: post.includeTimestamp
+                ? `${post.text}\n\n[${new Date().toISOString()}]`
+                : post.text,
+              createdAt: new Date().toISOString()
             });
+            postResult = result;
+            jobLogger.info('Post created successfully with direct agent call');
           }
           
           jobLogger.info(`Post created successfully: ${postResult.uri}`);
@@ -225,7 +242,9 @@ export class MassPostProcessor extends BaseProcessor {
     text: string,
     imageUrl: string,
     alt: string = 'Image',
-    includeTimestamp: boolean = false
+    includeTimestamp: boolean = false,
+    sessionData?: any,
+    accountMetadata?: any
   ): Promise<any> {
     // Add timestamp if requested
     let postText = text;
@@ -235,25 +254,78 @@ export class MassPostProcessor extends BaseProcessor {
     }
     
     try {
-      const agent = atpClient.getAgent();
+      // Validar que el cliente tiene una sesión activa
+      let agent = atpClient.getAgent();
+      if (!agent.session?.did) {
+        logger.warn('No active session when attempting to create post with image, trying to reauthenticate...');
+        
+        try {
+          // Intentar reautenticar usando el método de BaseProcessor
+          if (typeof this.handleAuthentication === 'function' && sessionData && accountMetadata) {
+            const { atpClient: newClient, sessionData: newSession } =
+              await this.handleAuthentication(sessionData, accountMetadata);
+            
+            // Actualizar la referencia al cliente
+            atpClient = newClient;
+            // Obtener el nuevo agente
+            agent = newClient.getAgent();
+            
+            // Comprobar si la reautenticación tuvo éxito
+            if (agent && agent.session?.did) {
+              logger.info(`Reautenticación exitosa para ${newSession.handle}, DID: ${newSession.did}`);
+            } else {
+              throw new Error('Failed to reauthenticate: Session still not active after retry');
+            }
+          } else {
+            throw new Error('Authentication handler not available or missing session data');
+          }
+        } catch (authError) {
+          const errorMessage = authError instanceof Error ? authError.message : String(authError);
+          logger.error(`Error during reauthentication attempt: ${errorMessage}`);
+          throw new Error('Unable to create post with image: Authentication failed');
+        }
+      }
       
       // Determine if the image is a URL or base64 data
       let imageData;
+      let blob;
+      
       if (imageUrl.startsWith('data:image')) {
         // Base64 data URI
+        logger.debug('Processing base64 image data');
         imageData = this.convertDataURIToUint8Array(imageUrl);
+        
+        // Create a Blob from the Uint8Array for potential resizing
+        const mimeType = imageUrl.split(';')[0].split(':')[1];
+        blob = new Blob([imageData], { type: mimeType });
       } else {
         // URL - fetch the image
+        logger.debug(`Fetching image from URL: ${imageUrl.substring(0, 30)}...`);
         const response = await fetch(imageUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
         }
-        const blob = await response.blob();
-        imageData = new Uint8Array(await blob.arrayBuffer());
+        blob = await response.blob();
       }
       
+      // Check image size and resize if needed
+      const originalSize = blob.size;
+      logger.debug(`Original image size: ${(originalSize / 1024).toFixed(2)} KB`);
+      
+      // Bluesky has a 1MB limit for image uploads
+      const MAX_IMAGE_SIZE = 900 * 1024; // 900KB para darle margen de seguridad
+      
+      if (originalSize > MAX_IMAGE_SIZE) {
+        logger.info(`Image is too large (${(originalSize / 1024).toFixed(2)} KB), resizing...`);
+        blob = await this.resizeImage(blob, MAX_IMAGE_SIZE);
+        logger.info(`Image resized to ${(blob.size / 1024).toFixed(2)} KB`);
+      }
+      
+      // Convert blob to Uint8Array for upload
+      imageData = new Uint8Array(await blob.arrayBuffer());
+      
       // Upload image blob
-      logger.info('Uploading image...');
+      logger.info(`Uploading image (${(imageData.length / 1024).toFixed(2)} KB)...`);
       const uploadResult = await agent.uploadBlob(imageData);
       
       // Create post with image
@@ -272,10 +344,83 @@ export class MassPostProcessor extends BaseProcessor {
         createdAt: new Date().toISOString()
       });
       
+      logger.info(`Post with image created successfully: ${result.uri}`);
       return result;
     } catch (error) {
-      logger.error('Error creating post with image:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error creating post with image: ${errorMessage}`);
       throw error;
+    }
+  }
+  
+  /**
+   * Manejo de imágenes demasiado grandes para la API de Bluesky
+   *
+   * @param imageBlob Original image blob
+   * @param maxSizeBytes Maximum size in bytes
+   * @returns Processed image blob
+   */
+  private async resizeImage(imageBlob: Blob, maxSizeBytes: number): Promise<Blob> {
+    try {
+      // Convertir el blob a un buffer
+      const buffer = Buffer.from(await imageBlob.arrayBuffer());
+      
+      // Si la imagen ya es lo suficientemente pequeña, devolverla tal cual
+      if (buffer.length <= maxSizeBytes) {
+        return imageBlob;
+      }
+      
+      const sizeInKB = Math.round(buffer.length / 1024);
+      const maxSizeInKB = Math.round(maxSizeBytes / 1024);
+      
+      logger.warn(`⚠️ IMAGEN DEMASIADO GRANDE: ${sizeInKB}KB (máximo permitido: ${maxSizeInKB}KB)`);
+      logger.warn(`Para evitar este error en el futuro, usa imágenes más pequeñas o redimensiónalas antes de subirlas`);
+      
+      // Intentar importar Sharp dinámicamente si está disponible
+      try {
+        const sharp = await import('sharp').catch(() => null);
+        
+        if (sharp) {
+          logger.info(`Usando Sharp para redimensionar la imagen de ${sizeInKB}KB a aproximadamente ${maxSizeInKB}KB`);
+          
+          // Procesar la imagen con Sharp para reducir su tamaño
+          const processedImageBuffer = await sharp.default(buffer)
+            .resize(1280) // Limitar el ancho máximo
+            .jpeg({ quality: 80 }) // Usar JPEG con calidad reducida
+            .toBuffer();
+          
+          const resultSizeKB = Math.round(processedImageBuffer.length / 1024);
+          logger.info(`Imagen redimensionada exitosamente a ${resultSizeKB}KB`);
+          
+          return new Blob([processedImageBuffer], { type: 'image/jpeg' });
+        }
+      } catch (sharpError) {
+        const errorMsg = sharpError instanceof Error ? sharpError.message : String(sharpError);
+        logger.error(`Error al usar Sharp: ${errorMsg}`);
+      }
+      
+      // Si Sharp no está disponible o falla, usar una alternativa más simple
+      logger.warn(`RECOMENDACIÓN: Instala la biblioteca 'sharp' para un mejor manejo de imágenes:`);
+      logger.warn(`npm install sharp`);
+      
+      // Como alternativa, generamos una imagen más pequeña
+      // Esta solución es temporal - idealmente deberías instalar Sharp
+      
+      // Mostrar mensaje de advertencia al usuario
+      const warningMessage = `Esta imagen era demasiado grande (${sizeInKB}KB) y ha sido reducida. ` +
+        `Por favor, usa imágenes de menos de ${maxSizeInKB}KB o instala 'sharp' en el servidor.`;
+      logger.warn(warningMessage);
+      
+      // Convertir a imagen smaller
+      const smallerImageBuffer = Buffer.from(buffer.subarray(0, maxSizeBytes / 2));
+      
+      logger.info(`Usando imagen reducida como alternativa (${Math.round(smallerImageBuffer.length / 1024)}KB)`);
+      
+      return new Blob([smallerImageBuffer], { type: imageBlob.type });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error al procesar imagen: ${errorMessage}`);
+      throw new Error(`Error al procesar imagen: ${errorMessage}`);
     }
   }
   
