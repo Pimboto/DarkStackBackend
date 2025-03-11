@@ -58,8 +58,45 @@ const apiLimiter = rateLimit({
 });
 app.use("/api", apiLimiter);
 
+// Router principal
+const apiRouter = express.Router();
+
+/**
+ * @swagger
+ * /api/status:
+ *   get:
+ *     summary: Get API status
+ *     description: Returns the current status of the API
+ *     tags: [Status]
+ *     responses:
+ *       200:
+ *         description: API status information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
+apiRouter.get("/status", (_, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Middleware ficticio para userId - Corregido para evitar error TS2769
 const userIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  // No aplicar este middleware para la ruta /status
+  if (req.path === '/status') {
+    return next();
+  }
+
   const userId =
     (req.headers["x-user-id"] as string) || (req.query.userId as string);
 
@@ -76,44 +113,8 @@ const userIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-app.use(userIdMiddleware);
-
-// Router principal
-const apiRouter = express.Router();
-
-/**
- * @swagger
- * /api/status:
- *   get:
- *     summary: Get API status
- *     description: Returns the current status of the API and user information
- *     tags: [Status]
- *     security:
- *       - userId: []
- *     responses:
- *       200:
- *         description: API status information
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: ok
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 userId:
- *                   type: string
- */
-apiRouter.get("/status", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    userId: req.userId,
-  });
-});
+// Aplicar middleware a todas las rutas excepto las ya definidas
+apiRouter.use(userIdMiddleware);
 
 /**
  * @swagger
