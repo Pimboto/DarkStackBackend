@@ -1,22 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs", "python3", "gcc", "make", "g++", "vips", "pkg-config"]
+aptPkgs = ["python3", "gcc", "g++", "make", "libvips-dev", "pkg-config"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install"]
 
 [phases.build]
 cmds = ["npm run build"]
 
 [start]
 cmd = "npm run start"
-
-[variables]
-PORT = "3000"
-NODE_ENV = "production"
-
-[phases.setup.edge]
-cmds = [
-  "curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -",
-  "apt-get install -y nodejs",
-  "npm install -g npm"
-]
