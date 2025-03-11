@@ -4,15 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start:minimal": "node dist/minimal-bot.js",
-    "start:basic": "node dist/examples/basicBot.js",
-    "start:chat": "node dist/examples/chatBot.js",
-    "start:engagement": "node dist/examples/engagementBot.js",
+    "start": "node dist/app.js",
     "dev": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/app.ts",
-    "dev:basic": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/basicBot.ts",
-    "dev:chat": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/chatBot.ts",
-    "dev:engagement": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/engagementBot.ts",
-    "debug:basic": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/examples/debug-basicBot.ts",
     "lint": "eslint src --ext .ts",
     "prepare": "npm run build"
   },

@@ -20,7 +20,6 @@ import { getAccountsByCategory } from "../config/supabase.ts";
 
 import {
   addJob,
-  addBulkJobs,
   getJob,
   getJobsByParentId,
   getQueue,
@@ -440,37 +439,6 @@ apiRouter.post(
     }
   })
 );
-// Añadir múltiples jobs
-apiRouter.post(
-  "/jobs/bulk/:jobType",
-  customAsyncHandler(async (req, res) => {
-    const { jobType } = req.params;
-    const { dataItems, parentId, priority } = req.body;
-
-    if (!dataItems || !Array.isArray(dataItems) || dataItems.length === 0) {
-      return res.status(400).json({ error: "dataItems array is required" });
-    }
-    if (!["basicBot", "chatBot", "engagementBot"].includes(jobType)) {
-      return res.status(400).json({ error: "Invalid job type" });
-    }
-
-    const jobIds = await addBulkJobs(
-      jobType as JobType,
-      req.userId,
-      dataItems,
-      {
-        parentId,
-        priority,
-      }
-    );
-
-    return res.status(201).json({
-      message: `Added ${jobIds.length} jobs successfully`,
-      parentId: parentId || jobIds[0].split(":")[0],
-      jobIds,
-    });
-  })
-);
 
 // Obtener estado de un job
 apiRouter.get(
@@ -696,7 +664,7 @@ export async function startServer(port = 3000): Promise<http.Server> {
 
     // Inicialización de workers por usuario
     socket.on("init-workers", (data: { concurrency?: number }) => {
-      const concurrency = data.concurrency ?? 5;
+      const concurrency = data.concurrency ?? 100;
       logger.info(
         `Inicializando workers para usuario ${userId}, concurrencia ${concurrency}`
       );

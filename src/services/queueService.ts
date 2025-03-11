@@ -203,8 +203,8 @@ export function getQueue(jobType: JobType, userId: string): Queue {
         backoff: { type: 'exponential', delay: 5000 },
         // Implementar limpieza automática: trabajos completados se eliminan después de 1 día o cuando hay más de 1000
         removeOnComplete: { age: 86400, count: 1000 },
-        // Trabajos fallidos se mantienen más tiempo (7 días) para diagnóstico
-        removeOnFail: { age: 604800, count: 3000 },
+        // Trabajos fallidos se mantienen se eliminan después de 1 día o cuando hay más de 1000
+        removeOnFail: { age: 86400, count: 1000 },
       },
     };
 
@@ -219,7 +219,7 @@ export function getQueue(jobType: JobType, userId: string): Queue {
     // AUTO INICIALIZACIÓN: Crear un worker automáticamente cuando se crea una cola
     // (si no existe ya)
     if (!workerMap.has(queueKey)) {
-      createWorker(jobType, userId, 3); // Usar concurrencia por defecto de 3
+      createWorker(jobType, userId, 100); // Usar concurrencia por defecto de 100
     }
   }
 
@@ -265,7 +265,7 @@ async function addJobLog(job: Job, level: 'info' | 'error' | 'debug' | 'warn', m
 export function createWorker(
   jobType: JobType,
   userId: string,
-  concurrency: number = 3
+  concurrency: number = 100
 ): Worker {
   const queueKey = getQueueKey(jobType, userId);
   const queueName = getQueueName(jobType, userId);

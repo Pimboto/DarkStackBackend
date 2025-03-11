@@ -5,7 +5,7 @@ import logger from '../utils/logger.ts';
 /**
  * Crea los 3 workers para un userId
  */
-export function createBotWorkers(userId: string, concurrency = 5): void {
+export function createBotWorkers(userId: string, concurrency = 100): void {
   logger.info(`Creating bot workers for user ${userId}, concurrency=${concurrency}`);
   const botTypes: JobType[] = ['massPostBot', 'engagementBot'];
 
@@ -20,7 +20,7 @@ export function createBotWorkers(userId: string, concurrency = 5): void {
 /**
  * Inicializa workers para varios usuarios
  */
-export function initializeWorkers(userIds: string[], concurrency = 5): void {
+export function initializeWorkers(userIds: string[], concurrency = 100): void {
   logger.info(`Initializing workers for ${userIds.length} users`);
   for (const userId of userIds) {
     createBotWorkers(userId, concurrency);
