@@ -10,17 +10,24 @@ import { LogLevel } from './types/index.ts';
 // Cargar variables de entorno
 try {
   const envPath = path.resolve(process.cwd(), '.env');
-  logger.debug(`Loading environment variables from ${envPath}`);
+  logger.debug(`Checking for environment file at ${envPath}`);
 
-  const result = dotenv.config({ path: envPath });
-  if (result.error) {
-    throw result.error;
+  // Solo intentar cargar .env si estamos en desarrollo
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug(`Loading environment variables from ${envPath}`);
+    const result = dotenv.config({ path: envPath });
+    if (result.error) {
+      logger.warn('Error loading .env file:', result.error);
+      logger.info('Continuing with environment variables from process.env');
+    } else {
+      logger.info('Environment variables loaded successfully from .env file');
+    }
+  } else {
+    logger.info('Running in production mode, using environment variables from platform');
   }
-
-  logger.info('Environment variables loaded successfully');
 } catch (error) {
-  logger.error('Error loading .env file:', error);
-  process.exit(1);
+  logger.warn('Error checking for .env file:', error);
+  logger.info('Continuing with environment variables from process.env');
 }
 
 // Configurar nivel de log
