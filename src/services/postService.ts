@@ -105,7 +105,7 @@ class PostService {
    * @param limit Número máximo de posts a obtener
    * @returns Timeline con los posts
    */
-  async getTimeline(limit: number = 50): Promise<any> {
+  async getTimeline(limit: number = 100): Promise<any> {
     try {
       logger.info(`Getting timeline (limit: ${limit})...`);
       const timeline = await this.atpClient.getTimeline(limit);
