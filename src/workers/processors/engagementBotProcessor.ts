@@ -70,7 +70,7 @@ export class EngagementBotProcessor extends BaseProcessor {
 
       await job.updateProgress(50);
       const timelineResponse = await atpClient.getTimeline(
-        Math.max(100, simulationResult.plannedActions.length * 2)
+        Math.min(100, simulationResult.plannedActions.length * 2)
       );
 
       let processedActions = 0;
