@@ -3,7 +3,7 @@ import { Job } from 'bullmq';
 import { initializeBsky, LogLevel } from '../../index.ts';
 import { createEngagementStrategy } from '../../strategies/engagementStrategy.ts';
 import { BaseProcessor } from './BaseProcessor.ts';
-import { PlannedAction, EngagementResult } from '../../types/index.ts';
+import { PlannedAction, EngagementResult, FeedType } from '../../types/index.ts';
 import logger from '../../utils/logger.ts';
 
 /**
@@ -68,11 +68,10 @@ export class EngagementBotProcessor extends BaseProcessor {
       
       const simulationResult = strategy.simulate();
 
+      // Update progress after simulation
       await job.updateProgress(50);
-      const timelineResponse = await atpClient.getTimeline(
-        Math.min(100, simulationResult.plannedActions.length * 2)
-      );
-
+      
+      // Set up for progress tracking
       let processedActions = 0;
       const totalActions = simulationResult.plannedActions.length;
 
@@ -83,11 +82,13 @@ export class EngagementBotProcessor extends BaseProcessor {
         await job.updateProgress(percentage);
       };
 
-      logger.info('Executing engagement actions...');
+      // Execute engagement actions using the What's Hot feed
+      logger.info("Executing engagement actions using What's Hot feed...");
       const results = await customEngagementService.executeEngagement(
         simulationResult,
         {
-          timelinePosts: timelineResponse.feed,
+          // Use the What's Hot feed by default
+          feedType: FeedType.WHATS_HOT,
           stopOnError: false,
           dryRun: false,
           progressCallback: async (action: PlannedAction, index: number) => {

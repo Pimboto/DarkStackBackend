@@ -61,6 +61,12 @@ export interface EngagementResult {
   error?: Error;
 }
 
+// Tipos de feed disponibles
+export enum FeedType {
+  TIMELINE = 'timeline',
+  WHATS_HOT = 'whats-hot'
+}
+
 // Tipos de post en el timeline
 export interface TimelinePost {
   uri: string;

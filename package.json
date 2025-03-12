@@ -6,6 +6,7 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "dev": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" src/app.ts",
+    "dev:timeline": "nodemon --exec \"node --no-warnings=ExperimentalWarning --loader ts-node/esm\" examples/getTimeline.ts",
     "lint": "eslint src --ext .ts",
     "prepare": "npm run build"
   },

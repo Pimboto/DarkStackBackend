@@ -295,6 +295,45 @@ class AtpClient {
   }
 
   /**
+   * Obtiene posts de un feed específico
+   * @param feedUri URI del feed a obtener
+   * @param limit Número máximo de posts a obtener
+   * @param cursor Token de paginación para continuar desde una petición anterior
+   * @returns Feed con los posts
+   */
+  async getFeed(feedUri: string, limit: number = 50, cursor?: string): Promise<any> {
+    if (!this.agent.session?.did) {
+      logger.error('Cannot get feed: Not logged in');
+      throw new Error('Not logged in');
+    }
+
+    try {
+      const params: any = { feed: feedUri, limit };
+      if (cursor) {
+        params.cursor = cursor;
+      }
+      
+      logger.debug(`Getting feed ${feedUri} (limit: ${limit})${cursor ? ', with cursor' : ''}...`);
+      const result = await this.agent.api.app.bsky.feed.getFeed(params);
+      logger.info(`Retrieved ${result.data.feed.length} posts from feed ${feedUri}`);
+      return result.data;
+    } catch (error) {
+      logger.error(`Error getting feed ${feedUri}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene posts del feed "What's Hot" de Bluesky
+   * @param limit Número máximo de posts a obtener
+   * @returns Feed "What's Hot" con los posts
+   */
+  async getWhatsHotFeed(limit: number = 50): Promise<any> {
+    const WHATS_HOT_URI = "at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot";
+    return this.getFeed(WHATS_HOT_URI, limit);
+  }
+
+  /**
    * Responde a un post
    * @param replyTo Objeto con uri y cid del post al que se responde
    * @param text Texto de la respuesta

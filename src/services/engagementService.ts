@@ -7,6 +7,7 @@ import {
   SimulationResult,
   EngagementResult,
   TimelinePost,
+  FeedType,
 } from "../types/index.ts";
 import { getEngagementConfig } from "../config/config.ts";
 import { getRandomInt } from "../utils/random.ts";
@@ -125,23 +126,40 @@ class EngagementService {
         action: PlannedAction,
         index: number
       ) => Promise<void>;
+      feedType?: FeedType;
     } = {}
   ): Promise<EngagementResult[]> {
     const { plannedActions } = simulationResult;
-    const { dryRun = false, stopOnError = false, progressCallback } = options;
+    const {
+      dryRun = false,
+      stopOnError = false,
+      progressCallback,
+      feedType = FeedType.WHATS_HOT  // Default to What's Hot feed
+    } = options;
 
-    // Obtener posts del timeline si no se proporcionaron
-    const timelinePosts =
-      options.timelinePosts ||
-      (
-        await this.atpClient.getTimeline(
-          Math.min(100, plannedActions.length * 2)
-        )
-      ).feed;
+    // Obtener posts del timeline o feed especificado si no se proporcionaron
+    let posts;
+    if (options.timelinePosts) {
+      posts = options.timelinePosts;
+      this.logFns.info("Using provided posts for engagement");
+    } else {
+      const limit = Math.min(100, plannedActions.length * 2);
+      
+      if (feedType === FeedType.WHATS_HOT) {
+        this.logFns.info(`Getting posts from What's Hot feed (limit: ${limit})...`);
+        posts = (await this.atpClient.getWhatsHotFeed(limit)).feed;
+      } else {
+        this.logFns.info(`Getting posts from timeline (limit: ${limit})...`);
+        posts = (await this.atpClient.getTimeline(limit)).feed;
+      }
+    }
 
-    if (!timelinePosts || timelinePosts.length === 0) {
+    if (!posts || posts.length === 0) {
       throw new Error("No posts available for engagement actions");
     }
+
+    this.logFns.info(`Retrieved ${posts.length} posts for engagement actions`);
+    const timelinePosts = posts;
 
     this.logFns.info(
       `Starting execution of ${plannedActions.length} engagement actions (${
