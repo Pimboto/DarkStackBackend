@@ -265,7 +265,7 @@ async function addJobLog(job: Job, level: 'info' | 'error' | 'debug' | 'warn', m
 export function createWorker(
   jobType: JobType,
   userId: string,
-  concurrency: number = 100
+  concurrency: number = 1000
 ): Worker {
   const queueKey = getQueueKey(jobType, userId);
   const queueName = getQueueName(jobType, userId);

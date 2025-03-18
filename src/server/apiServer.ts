@@ -665,7 +665,7 @@ export async function startServer(port = 3000): Promise<http.Server> {
 
     // Inicialización de workers por usuario
     socket.on("init-workers", (data: { concurrency?: number }) => {
-      const concurrency = data.concurrency ?? 100;
+      const concurrency = data.concurrency ?? 1000;
       logger.info(
         `Inicializando workers para usuario ${userId}, concurrencia ${concurrency}`
       );
